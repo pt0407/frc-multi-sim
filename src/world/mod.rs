@@ -12,6 +12,7 @@ pub use field::{FieldSpec, FIELD_HALF_X, FIELD_HALF_Z};
 pub use pieces::{HubZone, PieceTable, SpawnZone};
 
 use crate::drivetrain::{rot2, yaw_from_quat, Drivetrain};
+use crate::r#match::{MatchClock, MatchPhase, PhaseScore};
 use crate::rng::SimRng;
 use crate::{ActuatorFrame, SensorFrame};
 use rapier3d::prelude::*;
@@ -52,6 +53,17 @@ pub struct World {
     intakes: Vec<Option<IntakeSpec>>,
     /// sticky intake-run flag per robot, updated from actuator frames
     intake_active: Vec<bool>,
+    /// physics ticks elapsed — the world's only clock (issue #10); the
+    /// match phase is a pure function of this via `match_clock`
+    tick: u64,
+    /// match state machine config (issue #10); default = start enabled
+    /// (disabled_s = 0) so bare worlds behave exactly like before
+    pub match_clock: MatchClock,
+    /// per-alliance score attributed to the phase it was scored in
+    /// (auto / teleop / endgame+bonus); `scores` stays the running total
+    pub score_by_phase: [PhaseScore; 2],
+    /// set once the climb bonus has been awarded at match completion
+    match_finished: bool,
 }
 
 impl World {
@@ -107,6 +119,10 @@ impl World {
             hubs: table.hubs.clone(),
             intakes: specs.iter().map(|s| s.intake).collect(),
             intake_active: vec![false; specs.len()],
+            tick: 0,
+            match_clock: MatchClock::default(),
+            score_by_phase: [PhaseScore::default(); 2],
+            match_finished: false,
         };
 
         field::build_arena(&w.field, &mut w.bodies, &mut w.colliders);
@@ -136,9 +152,18 @@ impl World {
 
     /// Apply per-robot actuator commands, then advance the physics one
     /// fixed step (1/PHYSICS_HZ). Step-count driven, never wall-clock.
+    /// While the match is `disabled` or `complete` actuator commands are
+    /// ignored — as on a real field (issue #10).
     pub fn step(&mut self, commands: &[Option<ActuatorFrame>]) {
+        let phase = self.match_clock.phase_at(self.tick);
+        let enabled = phase.enabled();
         for (i, handle) in self.chassis.iter().enumerate() {
-            if let Some(Some(cmd)) = commands.get(i) {
+            let cmd = if enabled {
+                commands.get(i).and_then(|c| c.as_ref())
+            } else {
+                None
+            };
+            if let Some(cmd) = cmd {
                 // per-wheel traction model: resolve the actuator command into
                 // module forces (grip-limited), then apply them off-center so
                 // yaw torque emerges from the force placement.
@@ -213,16 +238,62 @@ impl World {
             &(),
         );
         self.update_game_pieces();
+        self.tick += 1;
+        // endgame/climb placeholder (issue #10): on the transition into
+        // `complete`, any robot parked within `climb_radius_m` of a field
+        // climb point banks the bonus for its alliance
+        if !self.match_finished
+            && self.match_clock.phase_at(self.tick) == MatchPhase::Complete
+        {
+            self.award_climb_bonus();
+            self.match_finished = true;
+        }
+    }
+
+    /// Physics ticks elapsed since world construction.
+    pub fn tick(&self) -> u64 {
+        self.tick
+    }
+
+    /// One-shot endgame bonus: each robot within horizontal
+    /// `climb_radius_m` of any field climb point scores
+    /// `climb_bonus_points` for its alliance (counted in the endgame
+    /// bucket). Real rigid-body climb joints are B3 follow-up; this ties
+    /// the placeholder to the field spec's climb-point anchors.
+    fn award_climb_bonus(&mut self) {
+        let cfg = &self.match_clock.config;
+        if cfg.climb_bonus_points == 0 || self.field.climb_points.is_empty() {
+            return;
+        }
+        let r2 = cfg.climb_radius_m * cfg.climb_radius_m;
+        for (i, handle) in self.chassis.iter().enumerate() {
+            let t = self.bodies[*handle].translation();
+            let climbed = self.field.climb_points.iter().any(|c| {
+                let dx = t.x - c.pos[0];
+                let dz = t.z - c.pos[2];
+                dx * dx + dz * dz <= r2
+            });
+            if climbed {
+                let a = (i % self.scores.len()).min(self.scores.len() - 1);
+                self.scores[a] += cfg.climb_bonus_points;
+                self.score_by_phase[a].endgame += cfg.climb_bonus_points;
+            }
+        }
     }
 
     /// Post-step piece layer: intake captures (FuelSim registerIntake —
     /// robot-relative AABB, piece is removed and counted as held) and hub
     /// scoring (piece falls through a hub's entry plane -> alliance score).
     fn update_game_pieces(&mut self) {
-        // robot poses for intake tests (only robots with an active intake)
+        let phase = self.match_clock.phase_at(self.tick);
+        // robot poses for intake tests (only robots with an active intake;
+        // intake is a mechanism command, so it's inert while disabled)
         let robots: Vec<Option<([f32; 3], f32)>> = (0..self.chassis.len())
             .map(|i| {
-                if self.intake_active[i] && self.intakes[i].is_some() {
+                if phase.enabled()
+                    && self.intake_active[i]
+                    && self.intakes[i].is_some()
+                {
                     let body = &self.bodies[self.chassis[i]];
                     let t = body.translation();
                     let r = body.rotation();
@@ -264,7 +335,8 @@ impl World {
                 continue;
             }
 
-            // hub scoring: first matching hub wins
+            // hub scoring: first matching hub wins; the point is also
+            // attributed to the match phase it was scored in (issue #10)
             if let Some(hub) = self
                 .hubs
                 .iter()
@@ -272,6 +344,7 @@ impl World {
             {
                 let a = (hub.alliance as usize).min(self.scores.len() - 1);
                 self.scores[a] += 1;
+                self.score_by_phase[a].add(phase, 1);
                 remove.push(pi);
             }
         }
@@ -321,6 +394,8 @@ impl World {
             contact_impulse,
             pieces_held: self.held[robot],
             score: self.scores[robot % self.scores.len()],
+            match_state: self.match_clock.phase_at(tick),
+            match_time: self.match_clock.time_remaining(tick),
         }
     }
 

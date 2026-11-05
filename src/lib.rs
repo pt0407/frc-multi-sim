@@ -3,6 +3,7 @@ pub mod archetype;
 pub mod config;
 pub mod debug_nt;
 pub mod drivetrain;
+pub mod r#match;
 pub mod nt_client_min;
 pub mod nt_server;
 pub mod protocol;

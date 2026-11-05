@@ -29,6 +29,13 @@ pub struct SensorFrame {
     /// this robot's alliance score (pieces scored into its hub, issue #3)
     #[serde(default)]
     pub score: u32,
+    /// current match phase (`"disabled"|"auto"|"teleop"|"endgame"|"complete"`,
+    /// issue #10). Additive: agents that predate #10 default to disabled.
+    #[serde(default)]
+    pub match_state: crate::r#match::MatchPhase,
+    /// seconds remaining in the current match phase (0 when complete)
+    #[serde(default)]
+    pub match_time: f32,
 }
 
 /// What an agent sends back. In a real adapter these are per-wheel/module

@@ -30,6 +30,7 @@ const PUB_HZ: f32 = 30.0;
 // NT4 type ids (see nt_server::type_name)
 const TY_INT: u32 = 0x01;
 const TY_DOUBLE: u32 = 0x03;
+const TY_STRING: u32 = 0x04;
 const TY_DOUBLE_ARR: u32 = 0x13;
 
 /// Extract yaw (rotation about the sim's up axis, +y) from a quaternion
@@ -73,6 +74,8 @@ pub async fn run(
                 }
                 if !tick_published {
                     server.publish("/Sim/Tick", TY_INT, rmpv::Value::from(0i64));
+                    server.publish("/Sim/Match/State", TY_STRING, rmpv::Value::from("disabled"));
+                    server.publish("/Sim/Match/Time", TY_DOUBLE, rmpv::Value::from(0.0f64));
                     tick_published = true;
                 }
                 let mut tick: u64 = 0;
@@ -130,6 +133,11 @@ pub async fn run(
                     );
                 }
                 server.set("/Sim/Tick", rmpv::Value::from(tick as i64));
+                // match clock is identical for every robot; take any frame
+                if let Some(f) = latest.values().next() {
+                    server.set("/Sim/Match/State", rmpv::Value::from(f.match_state.name()));
+                    server.set("/Sim/Match/Time", rmpv::Value::from(f.match_time as f64));
+                }
             }
         }
     }

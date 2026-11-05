@@ -36,6 +36,9 @@ pub struct SimConfig {
     pub field: Option<PathBuf>,
     /// game-piece spawn/scoring table TOML (issue #3); None = empty field
     pub pieces: Option<PathBuf>,
+    /// game/match TOML (`[match]` section: phase durations, endgame rules,
+    /// issue #10); `None` -> built-in REBUILT-style default
+    pub game: Option<PathBuf>,
     /// write an event log here (record mode)
     pub record: Option<PathBuf>,
     /// re-run this log headless (replay mode)
@@ -120,6 +123,32 @@ impl SimConfig {
             },
             None => PieceTable::default(),
         }
+    }
+
+    /// Resolve the match timing/endgame rules: `--game` TOML if given,
+    /// else the built-in default (issue #10). The match clock is a pure
+    /// function of tick; this config is hashed into replay headers so a
+    /// log can't be replayed against different match rules silently.
+    pub fn match_config(&self) -> anyhow::Result<crate::r#match::MatchConfig> {
+        match &self.game {
+            Some(p) => crate::r#match::MatchConfig::load(p),
+            None => Ok(crate::r#match::MatchConfig::default()),
+        }
+    }
+
+    /// Fold the match config into the config hash (issue #10) — phase
+    /// durations change when commands are gated, so they affect the
+    /// trajectory exactly like specs do.
+    pub fn hash_match(&self, h: u64, m: &crate::r#match::MatchConfig) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        hasher.write_u64(h);
+        hasher.write(&serde_json::to_vec(m).unwrap_or_default());
+        if let Some(p) = &self.game {
+            if let Ok(bytes) = std::fs::read(p) {
+                hasher.write(&bytes);
+            }
+        }
+        hasher.finish()
     }
 
     /// Hash raw archetype file contents too, so config edits that don't

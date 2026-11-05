@@ -29,6 +29,11 @@ struct Args {
     /// Game-piece spawn/scoring table TOML (issue #3)
     #[arg(long)]
     pieces: Option<std::path::PathBuf>,
+    /// Game/match TOML with a `[match]` section: phase durations +
+    /// endgame/climb rules (issue #10). Defaults to games/rebuilt.toml
+    /// when present, else the built-in REBUILT-style default.
+    #[arg(long)]
+    game: Option<std::path::PathBuf>,
     /// Physics pacing mode
     #[arg(long, value_enum, default_value_t = TimeMode::Realtime)]
     time_mode: TimeMode,
@@ -117,6 +122,10 @@ async fn main() -> Result<()> {
             p.exists().then_some(p)
         }),
         pieces: args.pieces.clone(),
+        game: args.game.clone().or_else(|| {
+            let p = std::path::PathBuf::from("games/rebuilt.toml");
+            p.exists().then_some(p)
+        }),
         record: args.record.clone(),
         replay: args.replay.clone(),
         diff: args.diff.clone(),
@@ -139,7 +148,17 @@ async fn main() -> Result<()> {
         field.obstacles.len()
     );
     let piece_table = cfg.piece_table();
+    let match_cfg = cfg.match_config()?;
+    println!(
+        "match {:?}: disabled={}s auto={}s teleop={}s endgame={}s",
+        cfg.game,
+        match_cfg.disabled_s,
+        match_cfg.auto_s,
+        match_cfg.teleop_s,
+        match_cfg.endgame_s
+    );
     let mut world = World::with_config(&specs, cfg.seed, field.clone(), &piece_table);
+    world.match_clock = frc_sim_m0::r#match::MatchClock::new(match_cfg);
 
     // optional event log: header first, then per-tick records in the loop
     let mut log = match &cfg.record {
@@ -147,9 +166,12 @@ async fn main() -> Result<()> {
             let header = LogHeader {
                 protocol_version: PROTOCOL_VERSION,
                 seed: cfg.seed,
-                config_hash: cfg.hash_field(
-                    cfg.hash_archetype_files(SimConfig::config_hash(&specs)),
-                    &field,
+                config_hash: cfg.hash_match(
+                    cfg.hash_field(
+                        cfg.hash_archetype_files(SimConfig::config_hash(&specs)),
+                        &field,
+                    ),
+                    &match_cfg,
                 ),
                 specs: specs.clone(),
                 pieces: Some(piece_table.clone()),
@@ -271,6 +293,8 @@ async fn main() -> Result<()> {
                         pieces: world.piece_positions(),
                         scores: world.scores,
                         held: world.held.clone(),
+                        match_state: world.match_clock.phase_at(tick),
+                        match_time: world.match_clock.time_remaining(tick),
                     });
                     // periodic flush so a killed server loses at most ~1 s
                     if tick % PHYSICS_HZ as u64 == 0 {

@@ -1,0 +1,19 @@
+# REBUILT (2026) game config — match timing + endgame rules (issue #10,
+# PLAN C3). Loaded via `cargo run --bin server -- --game games/rebuilt.toml`
+# (auto-picked when the file exists). Field geometry lives in
+# fields/rebuilt.toml; piece spawns/hubs in games/fuel.toml — unifying
+# those into one game file is C4's seam.
+#
+# disabled_s = 0 keeps the legacy "start enabled" behavior; raise it to
+# stage a pre-match window (commands are ignored while disabled).
+# auto + teleop + endgame = 150 s, the standard FRC 2:30.
+
+[match]
+disabled_s          = 0.0
+auto_s              = 15.0
+teleop_s            = 105.0
+endgame_s           = 30.0
+# placeholder climb rule: robots within climb_radius_m (horizontal) of a
+# field climb point at match completion bank this bonus for their alliance
+climb_bonus_points  = 10
+climb_radius_m      = 1.0

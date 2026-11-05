@@ -29,6 +29,9 @@ pub struct VizFrame {
     pub scores: [u32; 2],
     /// per-robot held inventory
     pub held: Vec<u32>,
+    /// current match phase + seconds remaining in it (issue #10)
+    pub match_state: crate::r#match::MatchPhase,
+    pub match_time: f32,
 }
 
 /// Emit the loaded field layout (issue #14) so web clients can render the
@@ -74,6 +77,8 @@ async fn state_collector(
         pieces: Vec::new(),
         scores: [0; 2],
         held: Vec::new(),
+        match_state: crate::r#match::MatchPhase::Disabled,
+        match_time: 0.0,
     };
     let mut iv = interval(Duration::from_secs_f32(1.0 / VIZ_HZ));
     loop {
@@ -117,6 +122,8 @@ async fn state_collector(
                     "pieces": world_state.pieces,
                     "scores": world_state.scores,
                     "held": world_state.held,
+                    "match_state": world_state.match_state.name(),
+                    "match_time": world_state.match_time,
                 })
                 .to_string();
                 // ok if no spectators connected
