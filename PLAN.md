@@ -27,6 +27,26 @@ the design rationale and `PLAN.md`'s dependency graph for ordering constraints.
 
 ---
 
+## Work split (2026-11-05): two parallel sessions
+
+**Session A — fast implementer** (mechanical, well-scoped, plumbing-heavy):
+bug batch #26–29 · #13 gamepad agent · #30 headless sim bin · #31 AgentMsg
+replay · #33 match-state API · #23 per-game configs · #42 field import ·
+#43 robot CAD v1/v2 · #15/#16 dup cleanup · PR #41 trajectory agent.
+
+**Session B — physics/math** (modeling judgment, tuning, validation):
+#40 chassis friction (correct rolling-resistance model, not just a constant)
+· #44 constants alignment (friction/restitution/damping provenance) ·
+#12 RL obs vector + actor · #25 M4 AdvantageKit log-replay auto-tuning ·
+#6 WPILib adapter when JDK lands · drivetrain/traction refinements.
+
+Rule of thumb: if the PR's correctness depends on *physics judgment*
+(friction values, tuned constants, sim-vs-real divergence), it's Session B.
+If it's protocol plumbing, CLI surfaces, asset pipelines, or UI, it's Session A.
+Overlap files to watch: `world/` (B) vs `agents/`, `viz`, `web/`, `bin/` (A).
+
+---
+
 ## 0. Conventions (apply to every issue)
 
 These rules exist so later phases stay verifiable. Every PR should satisfy the
