@@ -23,9 +23,9 @@ v2 gaps (#58, mech_angle/NT/viz/intake-gating) · robot GLB pipeline (#56) ·
 M4 replay-tuning scaffold (`tune` binary, #25 partial).
 
 **Open, plan-relevant:** #6 WPILib adapter `[blocked: JDK+Gradle]` ·
-#33 match-state override API `[other agent in-flight]` ·
+#33 match-state override API `[landed: ws://127.0.0.1:9772]` ·
 #24 WASM build `[deprioritized]` · #25 M4 AdvantageKit tuning
-`[scaffold done; needs real logs]` · #43 v2 mechanism articulation `[spike
+`[scaffold done; needs real logs]` · GLB trimesh colliders `[opt-in landed]` · #43 v2 mechanism articulation `[spike
 landed; full scope open]`.
 
 **Duplicates still open:** none (#15/#16 closed).
