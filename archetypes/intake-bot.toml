@@ -14,3 +14,8 @@ z_min = -0.4
 z_max = 0.4
 y_min = -0.45
 y_max = 0.0
+
+# Sensor noise + vision latency model (issue #7).
+# presets: "off" (default), "clean", "competition"
+[sensors]
+preset = "competition"

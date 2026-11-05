@@ -29,6 +29,12 @@ pub struct SensorFrame {
     /// this robot's alliance score (pieces scored into its hub, issue #3)
     #[serde(default)]
     pub score: u32,
+    /// vision-style pose estimate (issue #7): latency-delayed, ~15-30 Hz,
+    /// distance-dependent noise, occasional dropout. `None` when no estimate
+    /// has been published yet or sensor noise is disabled. Backwards
+    /// compatible: absent in serialized frames it deserializes to `None`.
+    #[serde(default)]
+    pub vision_pose: Option<[f32; 3]>,
 }
 
 /// What an agent sends back. In a real adapter these are per-wheel/module

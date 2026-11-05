@@ -91,6 +91,22 @@ impl SimConfig {
             for v in s.spawn {
                 v.to_bits().hash(&mut h);
             }
+            s.sensors.enabled.hash(&mut h);
+            for v in [
+                s.sensors.gyro_std,
+                s.sensors.pose_std,
+                s.sensors.vel_std,
+                s.sensors.gyro_bias,
+                s.sensors.pose_bias,
+                s.sensors.vel_bias,
+                s.sensors.vision_latency_s,
+                s.sensors.vision_hz,
+                s.sensors.vision_dropout,
+                s.sensors.vision_std_min,
+                s.sensors.vision_std_max,
+            ] {
+                v.to_bits().hash(&mut h);
+            }
             if let Some(i) = s.intake {
                 for v in [i.x_min, i.x_max, i.z_min, i.z_max, i.y_min, i.y_max] {
                     v.to_bits().hash(&mut h);
