@@ -1,36 +1,44 @@
 # Game-piece table (issue #3): fuel spawn zones + hub scoring zones.
 # Load with: cargo run --bin server -- --pieces games/fuel.toml
 #
+# Positions updated for the real 2026 REBUILT layout (issue #42), derived
+# from the AdvantageScope Field3d_2026FRCFieldV1 model.glb:
+#   - hubs sit at x = ±3.645 (upper opening centered ≈ x ±3.493, rim y≈2.13)
+#   - neutral-zone fuel stash is the 5.23 x 1.83 m midfield rectangle
+#   - depot stashes sit inside the GE-266xx floor rails at (±7.9, ∓1.93)
+#
 # [[zone]]  — rectangular spawn area on the floor (x/z), pieces at rest
 # [[hub]]   — cylinder; a piece falling through entry_height inside
 #             radius scores for `alliance` (robot_id % 2)
 
-# midfield depot
+# midfield neutral zone (official 5.23 x 1.83 m stash)
 [[zone]]
 center = [0.0, 0.0]
-half_extents = [2.5, 1.5]
+half_extents = [2.615, 0.915]
 count = 120
 
-# side stashes
+# depot stashes (inside each alliance's depot rails; west depot is -z)
 [[zone]]
-center = [-6.0, 2.5]
-half_extents = [0.8, 0.8]
-count = 40
+center = [-7.9, -1.93]
+half_extents = [0.4, 0.4]
+count = 24
 
 [[zone]]
-center = [6.0, -2.5]
-half_extents = [0.8, 0.8]
-count = 40
+center = [7.9, 1.93]
+half_extents = [0.4, 0.4]
+count = 24
 
-# alliance 0 hub on the -x side, alliance 1 hub on +x
+# alliance 0 hub on the -x side, alliance 1 hub on +x. Opening is the
+# 1.19 m square at the GLB hub-top (≈0.6 m inscribed radius), entry plane
+# at the 2.13 m rim height.
 [[hub]]
-center = [-7.0, 0.0]
+center = [-3.493, 0.0]
 radius = 0.6
-entry_height = 1.0
+entry_height = 2.13
 alliance = 0
 
 [[hub]]
-center = [7.0, 0.0]
+center = [3.493, 0.0]
 radius = 0.6
-entry_height = 1.0
+entry_height = 2.13
 alliance = 1

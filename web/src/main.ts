@@ -8,9 +8,11 @@ import {
   MeshBuilder,
   Quaternion,
   Scene,
+  SceneLoader,
   StandardMaterial,
   Vector3,
 } from "@babylonjs/core";
+import "@babylonjs/loaders/glTF";
 
 const WS_URL = `ws://${location.hostname}:9771`;
 
@@ -30,6 +32,9 @@ interface ConfigMsg {
     wall_thick: number;
     walls?: WallSpec[];
     obstacles?: ObstacleSpec[];
+    // optional GLB visual model served from web/public (issue #42); when
+    // it loads successfully the primitive walls/obstacles are skipped
+    glb_url?: string | null;
   };
   robot: { half_extents: number };
 }
@@ -63,7 +68,7 @@ let robotHalf = 0.4;
 let fieldCfg: ConfigMsg["field"] | null = null;
 let built = false;
 
-function buildField() {
+async function buildField() {
   if (!fieldCfg || built) return;
   built = true;
   const { half_x, half_z, wall_height, wall_thick } = fieldCfg;
@@ -72,6 +77,25 @@ function buildField() {
   const gm = new StandardMaterial("gm", scene);
   gm.diffuseColor = new Color3(0.15, 0.4, 0.15);
   ground.material = gm;
+
+  // Prefer the real 2026 REBUILT field model (issue #42). The GLB shares
+  // our world frame (meters, y-up, x = field length), so no transform is
+  // needed. Staged "Fuel" decor meshes are hidden — simulated pieces come
+  // from the state stream. Fall back to primitives when the asset was not
+  // fetched (`npm run fetch-assets`, see web/ASSETS.md).
+  if (fieldCfg.glb_url) {
+    try {
+      const result = await SceneLoader.ImportMeshAsync("", fieldCfg.glb_url, "", scene);
+      for (const mesh of result.meshes) {
+        if (/Fuel/i.test(mesh.name)) mesh.setEnabled(false);
+      }
+      ground.visibility = 0; // GLB brings its own carpet
+      hud.textContent = "connected (GLB field), waiting for state…";
+      return;
+    } catch (err) {
+      console.warn("field GLB unavailable, using primitives:", err);
+    }
+  }
 
   const wm = new StandardMaterial("wm", scene);
   wm.diffuseColor = new Color3(0.6, 0.6, 0.65);
