@@ -1,9 +1,13 @@
-# REBUILT (2026) game config — match timing + endgame rules (issue #10,
-# PLAN C3). Loaded via `cargo run --bin server -- --game games/rebuilt.toml`
-# (auto-picked when the file exists). Field geometry lives in
-# fields/rebuilt.toml; piece spawns/hubs in games/fuel.toml — unifying
-# those into one game file is C4's seam.
-#
+# REBUILT (2026) game config — the single per-game surface (issue #23,
+# PLAN C4). One `--game games/rebuilt.toml` loads the field layout, the
+# piece spawn/scoring table, and the `[match]` timing/endgame rules in
+# one shot; `--field`/`--pieces` still override these refs when given.
+# Paths are resolved relative to this file's directory.
+
+name   = "rebuilt"
+field  = "../fields/rebuilt.toml"
+pieces = "fuel.toml"
+
 # disabled_s = 0 keeps the legacy "start enabled" behavior; raise it to
 # stage a pre-match window (commands are ignored while disabled).
 # auto + teleop + endgame = 150 s, the standard FRC 2:30.

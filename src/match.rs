@@ -119,27 +119,62 @@ impl Default for MatchConfig {
     }
 }
 
-/// `[match]` table inside a game config file (e.g. `games/rebuilt.toml`).
-/// Other game-level keys (field ref, piece table) are C4's seam; unknown
-/// top-level keys are ignored.
-#[derive(Debug, Deserialize)]
-struct GameFile {
-    #[serde(default, rename = "match")]
-    match_cfg: MatchConfig,
+/// Full per-game surface (issue #23, PLAN C4): a single `games/*.toml`
+/// names the field layout, the game-piece spawn/scoring table, and the
+/// `[match]` timing/endgame rules, so the server can be pointed at one
+/// file (`--game games/rebuilt.toml`) instead of separate
+/// `--field`/`--pieces`/`--game` flags. `field`/`pieces` paths are
+/// resolved relative to the game file's directory; the explicit CLI
+/// flags still win when both are given.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct GameSpec {
+    /// human-readable game name (defaults to the file stem). Used for
+    /// logging and for matching against archetype `compatible_games`.
+    pub name: Option<String>,
+    /// field layout TOML (`FieldSpec`), relative to this file's dir
+    pub field: Option<std::path::PathBuf>,
+    /// game-piece spawn/scoring table TOML (`PieceTable`), relative dir
+    pub pieces: Option<std::path::PathBuf>,
+    /// match timing + endgame rules
+    #[serde(rename = "match")]
+    pub match_cfg: MatchConfig,
+}
+
+impl GameSpec {
+    /// Load a game TOML: name + field/pieces refs + `[match]` section.
+    /// Invalid/missing referenced paths fail loudly when later resolved.
+    pub fn load(path: &Path) -> Result<Self> {
+        let text = std::fs::read_to_string(path)
+            .with_context(|| format!("reading game config {}", path.display()))?;
+        let mut g: GameSpec = toml::from_str(&text)
+            .with_context(|| format!("parsing game config {}", path.display()))?;
+        let dir = path.parent().unwrap_or_else(|| Path::new("."));
+        for r in [&mut g.field, &mut g.pieces].into_iter().flatten() {
+            if r.is_relative() {
+                *r = dir.join(&r);
+            }
+        }
+        g.match_cfg
+            .validate()
+            .with_context(|| format!("invalid match config {}", path.display()))?;
+        Ok(g)
+    }
+
+    /// Game name for logs/compat checks: `name` key or the file stem.
+    pub fn name(&self, path: &Path) -> String {
+        self.name
+            .clone()
+            .or_else(|| path.file_stem().map(|s| s.to_string_lossy().into_owned()))
+            .unwrap_or_else(|| "unnamed".to_string())
+    }
 }
 
 impl MatchConfig {
     /// Load the `[match]` section of a game TOML. Missing/invalid values
     /// fail loudly (schema-checked, like FieldSpec).
     pub fn load(path: &Path) -> Result<Self> {
-        let text = std::fs::read_to_string(path)
-            .with_context(|| format!("reading match config {}", path.display()))?;
-        let g: GameFile = toml::from_str(&text)
-            .with_context(|| format!("parsing match config {}", path.display()))?;
-        g.match_cfg
-            .validate()
-            .with_context(|| format!("invalid match config {}", path.display()))?;
-        Ok(g.match_cfg)
+        Ok(GameSpec::load(path)?.match_cfg)
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -247,7 +282,7 @@ mod tests {
 
     #[test]
     fn match_file_parses() {
-        let cfg: GameFile = toml::from_str(
+        let cfg: GameSpec = toml::from_str(
             r#"
 [match]
 auto_s = 20.0

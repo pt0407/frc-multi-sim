@@ -18,6 +18,7 @@ See [../ARCHITECTURE.md](../ARCHITECTURE.md) for the full design.
 |---|---|
 | `server` | Physics orchestrator: Rapier3D world, field + walls, N chassis at 400 Hz physics / 50 Hz agent tick. Two agent backends: raw WebSocket protocol, and **NT4 client bridge** (connects to each robot's own NT server, like a real WPILib sim). |
 | `drive` | Standalone agent process (WebSocket protocol): joystick-style force commands via a P-controller. |
+| `gamepad` | Human-in-the-loop agent (WebSocket protocol): physical gamepad via `gilrs` — left stick = drive force, right stick = yaw torque, right trigger/RB = intake, A = shoot. Deadzone + slew-rate limiting agent-side; sends zeroed frames when no pad is connected. |
 | `robot_process` | Mock WPILib robot: hosts its own **NT4 server** on a port, publishes actuator topics, polls sensor topics — the same topology a real WPILib sim exposes. |
 | `nt_probe` | NT4 debug probe: subscribes to all topics and prints updates. |
 | `web/` | Babylon.js browser viz: connects to the spectator stream and renders the field, walls, and color-coded robots with an orbit camera. |
@@ -72,6 +73,28 @@ Log files carry a header (seed, protocol version, per-robot specs, config
 hash) so a replay rebuilds the exact world. `--diff` exits non-zero with
 the first divergent tick + magnitude. Agents must send
 `protocol_version` in `Hello` (currently 1) or they're rejected.
+
+## Game configs
+
+`games/*.toml` is the single per-game surface (issue #23): one file names
+the field layout, the game-piece spawn/scoring table, and the `[match]`
+timing/endgame rules, so
+
+```bash
+cargo run --bin server -- --game games/rebuilt.toml
+```
+
+is equivalent to passing `--field fields/rebuilt.toml --pieces
+games/fuel.toml --game games/rebuilt.toml` (the explicit flags still win
+when both are given; `games/rebuilt.toml` is auto-picked when present).
+Archetype TOMLs may declare `compatible_games = ["rebuilt"]`; the server
+warns when an archetype is paired with a game not on its list.
+
+Drive a robot by hand with a USB/Bluetooth gamepad:
+
+```bash
+cargo run --bin gamepad -- --robot-id 0 --max-force 1500
+```
 
 ## Notes / known issues
 
