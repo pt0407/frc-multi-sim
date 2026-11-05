@@ -162,7 +162,7 @@ async function buildPrimitives() {
   // fetched (`npm run fetch-assets`, see web/ASSETS.md).
   if (fieldCfg.glb_url) {
     try {
-      const result = await SceneLoader.ImportMeshAsync("", fieldCfg.glb_url, "", scene);
+      const result = await SceneLoader.ImportMeshAsync("", location.origin, fieldCfg.glb_url, scene);
       for (const mesh of result.meshes) {
         if (/Fuel/i.test(mesh.name)) mesh.setEnabled(false);
       }
