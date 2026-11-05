@@ -444,6 +444,30 @@ impl World {
         frame
     }
 
+    /// Entity snapshot for RL observation building (issue #12): every
+    /// chassis pose/vel and every live piece position — the global-state
+    /// view the viz also broadcasts. Own-robot scalars in the obs still
+    /// come from the filtered `SensorFrame`; this feeds the
+    /// nearest-K/rays entity features only.
+    pub fn obs_world(&self) -> crate::obs::ObsWorld {
+        let robots = self
+            .chassis
+            .iter()
+            .map(|h| {
+                let b = &self.bodies[*h];
+                let t = b.translation();
+                let v = b.linvel();
+                ([t.x, t.y, t.z], [v.x, v.y, v.z])
+            })
+            .collect();
+        crate::obs::ObsWorld {
+            robots,
+            pieces: self.piece_positions(),
+            field_half: [self.field.half_x, self.field.half_z],
+            scores: self.scores,
+        }
+    }
+
     /// World positions of all live (not captured/scored) pieces, for the
     /// spectator state stream.
     pub fn piece_positions(&self) -> Vec<[f32; 3]> {

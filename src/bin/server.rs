@@ -66,6 +66,17 @@ struct Args {
     /// --record (physics replay) — this captures protocol traffic.
     #[arg(long)]
     proto_log: Option<std::path::PathBuf>,
+    /// Robot slots driven by the in-process RL policy agent (issue #12).
+    /// Repeatable, e.g. --policy 0 --policy 2 --policy 4. These slots run
+    /// the deterministic linear-stub policy behind the `Policy` trait;
+    /// each agent tick appends an (obs, action, reward, done) row to the
+    /// experience log. Combine with `--time-mode fast` for rollouts.
+    #[arg(long)]
+    policy: Vec<usize>,
+    /// Experience log path for --policy agents (JSONL; default
+    /// experiences.jsonl, only opened when at least one --policy is set)
+    #[arg(long)]
+    exp_log: Option<std::path::PathBuf>,
 }
 
 fn run_replay(cfg: &SimConfig) -> Result<()> {
@@ -199,6 +210,42 @@ async fn main() -> Result<()> {
     };
 
     let commands = Arc::new(CommandSlots::new(num_robots));
+
+    // in-process RL policy agents (issue #12): these slots are owned by
+    // PolicyAgents running inside the physics loop — obs is built from
+    // each robot's filtered SensorFrame + the shared ObsWorld snapshot,
+    // and (obs, action, reward, done) rows go to --exp-log JSONL.
+    let mut policy_agents: Vec<frc_sim_m0::agents::policy::PolicyAgent> = Vec::new();
+    for &r in &args.policy {
+        if r >= num_robots {
+            eprintln!("--policy {} out of range ({num_robots} robots), skipped", r);
+            continue;
+        }
+        policy_agents.push(frc_sim_m0::agents::policy::PolicyAgent::linear(
+            r,
+            frc_sim_m0::obs::ObsConfig::default(),
+            cfg.seed.wrapping_add(r as u64),
+        ));
+    }
+    let exp_log = if !policy_agents.is_empty() {
+        let path = args
+            .exp_log
+            .clone()
+            .unwrap_or_else(|| std::path::PathBuf::from("experiences.jsonl"));
+        match frc_sim_m0::agents::policy::ExperienceLogger::create(&path) {
+            Ok(l) => {
+                println!("experience log -> {}", path.display());
+                Some(l)
+            }
+            Err(e) => {
+                eprintln!("cannot open experience log {}: {e}", path.display());
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     let (sensor_tx, _) = tokio::sync::broadcast::channel::<(usize, SensorFrame)>(256);
     let (world_tx, _) = tokio::sync::broadcast::channel::<frc_sim_m0::viz::VizFrame>(64);
 
@@ -239,6 +286,8 @@ async fn main() -> Result<()> {
         let sensor_tx = sensor_tx.clone();
         let proto_log = proto_log.clone();
         let mode = cfg.time_mode;
+        let mut policy_agents = policy_agents;
+        let mut exp_log = exp_log;
         tokio::spawn(async move {
             let mut tick: u64 = 0;
             let mut last_cmds: Vec<Option<frc_sim_m0::ActuatorFrame>> = vec![None; num_robots];
@@ -293,6 +342,15 @@ async fn main() -> Result<()> {
                 last_cmds = cmds.clone();
                 world.step(&cmds);
                 if tick % AGENT_EVERY as u64 == 0 {
+                    // entity snapshot shared by all policy agents this
+                    // agent tick (taken before sensor_frame's &mut borrows)
+                    let obs_world = if policy_agents.is_empty() {
+                        None
+                    } else {
+                        Some(world.obs_world())
+                    };
+                    let mut frames: Vec<Option<SensorFrame>> =
+                        (0..num_robots).map(|_| None).collect();
                     for r in 0..num_robots {
                         let frame = world.sensor_frame(r, tick);
                         if let Some(w) = log.as_mut() {
@@ -302,10 +360,24 @@ async fn main() -> Result<()> {
                                 sample: replay::StateSample::from(&frame),
                             });
                         }
+                        frames[r] = Some(frame.clone());
                         let _ = sensor_tx.send((r, frame));
                     }
                     if let Some(p) = &proto_log {
                         p.note_tick(tick);
+                    }
+                    // policy agents: filtered frame + shared snapshot ->
+                    // command + experience row (deterministic, issue #12)
+                    if let Some(ow) = &obs_world {
+                        for agent in policy_agents.iter_mut() {
+                            if let Some(frame) = &frames[agent.robot] {
+                                let (cmd, exp) = agent.tick(frame, ow);
+                                commands.set(agent.robot, cmd);
+                                if let Some(l) = exp_log.as_mut() {
+                                    let _ = l.log(&exp);
+                                }
+                            }
+                        }
                     }
                     // spectator piece/score stream (~50 Hz source; the viz
                     // republishes at 30 Hz)
@@ -324,6 +396,9 @@ async fn main() -> Result<()> {
                         }
                         if let Some(p) = &proto_log {
                             p.flush();
+                        }
+                        if let Some(l) = exp_log.as_mut() {
+                            let _ = l.flush();
                         }
                     }
                 }
