@@ -6,6 +6,9 @@ mass = 55.0
 half_extents = [0.4, 0.4, 0.4]
 max_force = 1500.0
 drivetrain = "swerve"
+# games this archetype is built for (issue #23); the server warns when
+# it's paired with a game not in this list. Omit/empty = any game.
+compatible_games = ["rebuilt"]
 
 [intake]
 x_min = 0.3

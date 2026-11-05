@@ -112,20 +112,65 @@ fn run_replay(cfg: &SimConfig) -> Result<()> {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+
+    // Issue #23 / PLAN C4: a single `--game games/<game>.toml` names the
+    // field layout + piece table + match rules in one shot. The explicit
+    // --field/--pieces flags still override the game file's refs.
+    let game_path = args.game.clone().or_else(|| {
+        let p = std::path::PathBuf::from("games/rebuilt.toml");
+        p.exists().then_some(p)
+    });
+    let game_spec = match &game_path {
+        Some(p) => Some(frc_sim_m0::r#match::GameSpec::load(p)?),
+        None => None,
+    };
+    if let (Some(g), Some(p)) = (&game_spec, &game_path) {
+        println!(
+            "game {:?} ({}): field={:?} pieces={:?}",
+            g.name(p),
+            p.display(),
+            g.field,
+            g.pieces
+        );
+        // Archetype compat check: archetypes may declare `compatible_games`;
+        // a non-empty list that doesn't contain this game warns (issue #23).
+        for path in &args.archetype {
+            if let Ok(a) = frc_sim_m0::archetype::Archetype::load(path) {
+                let name = g.name(p);
+                if !a.compatible_games.is_empty()
+                    && !a.compatible_games.iter().any(|c| *c == name)
+                {
+                    eprintln!(
+                        "warning: archetype {:?} ({}) declares compatible_games={:?}; \
+                         game {:?} is not listed",
+                        a.name,
+                        path.display(),
+                        a.compatible_games,
+                        name
+                    );
+                }
+            }
+        }
+    }
+
     let cfg = SimConfig {
         time_mode: args.time_mode,
         seed: args.seed,
         nt_ports: args.nt.clone(),
         archetypes: args.archetype.clone(),
-        field: args.field.clone().or_else(|| {
-            let p = std::path::PathBuf::from("fields/rebuilt.toml");
-            p.exists().then_some(p)
-        }),
-        pieces: args.pieces.clone(),
-        game: args.game.clone().or_else(|| {
-            let p = std::path::PathBuf::from("games/rebuilt.toml");
-            p.exists().then_some(p)
-        }),
+        field: args
+            .field
+            .clone()
+            .or_else(|| game_spec.as_ref().and_then(|g| g.field.clone()))
+            .or_else(|| {
+                let p = std::path::PathBuf::from("fields/rebuilt.toml");
+                p.exists().then_some(p)
+            }),
+        pieces: args
+            .pieces
+            .clone()
+            .or_else(|| game_spec.as_ref().and_then(|g| g.pieces.clone())),
+        game: game_path,
         record: args.record.clone(),
         replay: args.replay.clone(),
         diff: args.diff.clone(),

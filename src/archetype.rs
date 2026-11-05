@@ -25,6 +25,11 @@ pub struct Archetype {
     /// optional `[sensors]` noise/latency config (issue #7); absent = off
     #[serde(default)]
     pub sensors: crate::world::noise::SensorSpec,
+    /// games this archetype is built for (issue #23): game names (the
+    /// game TOML `name` key or file stem). Empty = compatible with
+    /// everything; otherwise the server warns on a mismatch.
+    #[serde(default)]
+    pub compatible_games: Vec<String>,
 }
 
 fn default_drivetrain() -> String {
