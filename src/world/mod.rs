@@ -66,6 +66,10 @@ pub struct World {
     pub score_by_phase: [PhaseScore; 2],
     /// set once the climb bonus has been awarded at match completion
     match_finished: bool,
+    /// manual phase override (issue #33): (phase, ticks remaining). While
+    /// set, `phase()`/`time_remaining()` report the override and the normal
+    /// clock resumes when it expires.
+    phase_override: Option<(MatchPhase, u64)>,
     /// per-robot sensor noise/latency models (issue #7); drawn from `rng`
     sensors: Vec<SensorNoise>,
 }
@@ -128,6 +132,7 @@ impl World {
             match_clock: MatchClock::default(),
             score_by_phase: [PhaseScore::default(); 2],
             match_finished: false,
+            phase_override: None,
             sensors: Vec::new(),
         };
 
@@ -162,6 +167,62 @@ impl World {
         self.chassis.len()
     }
 
+    /// Current match phase. A manual override (issue #33) wins over the
+    /// clock until it expires.
+    pub fn phase(&self) -> MatchPhase {
+        self.phase_at_tick(self.tick)
+    }
+
+    /// Phase at an arbitrary tick (override-aware; used by `sensor_frame`,
+    /// which receives the tick it is reporting for).
+    pub fn phase_at_tick(&self, tick: u64) -> MatchPhase {
+        self.phase_override
+            .map(|(p, _)| p)
+            .unwrap_or_else(|| self.match_clock.phase_at(tick))
+    }
+
+    /// Seconds remaining in the current phase (override-aware).
+    pub fn time_remaining(&self) -> f32 {
+        self.time_remaining_at_tick(self.tick)
+    }
+
+    /// Phase-clock remaining at an arbitrary tick (override-aware).
+    pub fn time_remaining_at_tick(&self, tick: u64) -> f32 {
+        match self.phase_override {
+            Some((_, ticks)) => ticks as f32 / PHYSICS_HZ,
+            None => self.match_clock.time_remaining(tick),
+        }
+    }
+
+    /// Force `phase` for `secs` seconds, then resume the normal clock.
+    /// `secs <= 0` holds the phase until `clear_phase` (issue #33).
+    pub fn set_phase(&mut self, phase: MatchPhase, secs: f32) {
+        let ticks = if secs > 0.0 {
+            (secs * PHYSICS_HZ) as u64
+        } else {
+            u64::MAX
+        };
+        self.phase_override = Some((phase, ticks));
+    }
+
+    /// Whether a manual phase override is currently active (issue #33).
+    pub fn phase_override_active(&self) -> bool {
+        self.phase_override.is_some()
+    }
+
+    /// Drop any phase override; the clock resumes from `self.tick`.
+    pub fn clear_phase(&mut self) {
+        self.phase_override = None;
+    }
+
+    /// Award `points` to `alliance` (robot_id % 2), attributed to the
+    /// current phase bucket — manual-score hook for rehearsals (issue #33).
+    pub fn add_score(&mut self, alliance: usize, points: u32) {
+        let a = alliance.min(self.scores.len() - 1);
+        self.scores[a] += points;
+        self.score_by_phase[a].add(self.phase(), points);
+    }
+
     /// Ground-truth translation of one chassis (unfiltered — bypasses the
     /// sensor noise model).
     pub fn position(&self, robot: usize) -> [f32; 3] {
@@ -174,7 +235,7 @@ impl World {
     /// While the match is `disabled` or `complete` actuator commands are
     /// ignored — as on a real field (issue #10).
     pub fn step(&mut self, commands: &[Option<ActuatorFrame>]) {
-        let phase = self.match_clock.phase_at(self.tick);
+        let phase = self.phase();
         let enabled = phase.enabled();
         for (i, handle) in self.chassis.iter().enumerate() {
             let cmd = if enabled {
@@ -274,12 +335,17 @@ impl World {
         );
         self.update_game_pieces();
         self.tick += 1;
+        // phase override expiry (issue #33)
+        if let Some((_, remaining)) = &mut self.phase_override {
+            *remaining = remaining.saturating_sub(1);
+            if *remaining == 0 {
+                self.phase_override = None;
+            }
+        }
         // endgame/climb placeholder (issue #10): on the transition into
         // `complete`, any robot parked within `climb_radius_m` of a field
         // climb point banks the bonus for its alliance
-        if !self.match_finished
-            && self.match_clock.phase_at(self.tick) == MatchPhase::Complete
-        {
+        if !self.match_finished && self.phase() == MatchPhase::Complete {
             self.award_climb_bonus();
             self.match_finished = true;
         }
@@ -320,7 +386,7 @@ impl World {
     /// robot-relative AABB, piece is removed and counted as held) and hub
     /// scoring (piece falls through a hub's entry plane -> alliance score).
     fn update_game_pieces(&mut self) {
-        let phase = self.match_clock.phase_at(self.tick);
+        let phase = self.phase();
         // robot poses for intake tests (only robots with an active intake;
         // intake is a mechanism command, so it's inert while disabled)
         let robots: Vec<Option<([f32; 3], f32)>> = (0..self.chassis.len())
@@ -434,8 +500,8 @@ impl World {
             contact_impulse,
             pieces_held: self.held[robot],
             score: self.scores[robot % self.scores.len()],
-            match_state: self.match_clock.phase_at(tick),
-            match_time: self.match_clock.time_remaining(tick),
+            match_state: self.phase_at_tick(tick),
+            match_time: self.time_remaining_at_tick(tick),
             vision_pose: None,
         };
         // noise layer: no-op (and zero RNG draws) when disabled

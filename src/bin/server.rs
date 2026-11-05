@@ -66,6 +66,10 @@ struct Args {
     /// --record (physics replay) — this captures protocol traffic.
     #[arg(long)]
     proto_log: Option<std::path::PathBuf>,
+    /// Match control channel port (issue #33): JSON WS API for
+    /// set_phase / clear_phase / add_score / status. 0 disables.
+    #[arg(long, default_value_t = 9772)]
+    control_port: u16,
 }
 
 fn run_replay(cfg: &SimConfig) -> Result<()> {
@@ -166,6 +170,9 @@ async fn main() -> Result<()> {
     );
     let mut world = World::with_config(&specs, cfg.seed, field.clone(), &piece_table);
     world.match_clock = frc_sim_m0::r#match::MatchClock::new(match_cfg);
+    // shared with the control channel (issue #33); the physics loop locks
+    // it briefly each step — step() is fully synchronous
+    let world = Arc::new(std::sync::Mutex::new(world));
 
     // optional event log: header first, then per-tick records in the loop
     let mut log = match &cfg.record {
@@ -238,6 +245,8 @@ async fn main() -> Result<()> {
         let commands = commands.clone();
         let sensor_tx = sensor_tx.clone();
         let proto_log = proto_log.clone();
+        let world_tx = world_tx.clone();
+        let world = world.clone();
         let mode = cfg.time_mode;
         tokio::spawn(async move {
             let mut tick: u64 = 0;
@@ -291,45 +300,55 @@ async fn main() -> Result<()> {
                     }
                 }
                 last_cmds = cmds.clone();
-                world.step(&cmds);
-                if tick % AGENT_EVERY as u64 == 0 {
-                    for r in 0..num_robots {
-                        let frame = world.sensor_frame(r, tick);
-                        if let Some(w) = log.as_mut() {
-                            let _ = w.record(&Record::State {
-                                tick,
-                                robot: r as u32,
-                                sample: replay::StateSample::from(&frame),
-                            });
+                {
+                    let mut w = world.lock().unwrap();
+                    w.step(&cmds);
+                    if tick % AGENT_EVERY as u64 == 0 {
+                        for r in 0..num_robots {
+                            let frame = w.sensor_frame(r, tick);
+                            if let Some(wr) = log.as_mut() {
+                                let _ = wr.record(&Record::State {
+                                    tick,
+                                    robot: r as u32,
+                                    sample: replay::StateSample::from(&frame),
+                                });
+                            }
+                            let _ = sensor_tx.send((r, frame));
                         }
-                        let _ = sensor_tx.send((r, frame));
+                        // spectator piece/score stream (~50 Hz source; the viz
+                        // republishes at 30 Hz)
+                        let _ = world_tx.send(frc_sim_m0::viz::VizFrame {
+                            tick,
+                            pieces: w.piece_positions(),
+                            scores: w.scores,
+                            held: w.held.clone(),
+                            match_state: w.phase(),
+                            match_time: w.time_remaining(),
+                        });
+                    }
+                }
+                if let Some(p) = &proto_log {
+                    p.note_tick(tick);
+                }
+                // periodic flush so a killed server loses at most ~1 s
+                if tick % PHYSICS_HZ as u64 == 0 {
+                    if let Some(w) = log.as_mut() {
+                        let _ = w.flush();
                     }
                     if let Some(p) = &proto_log {
-                        p.note_tick(tick);
-                    }
-                    // spectator piece/score stream (~50 Hz source; the viz
-                    // republishes at 30 Hz)
-                    let _ = world_tx.send(frc_sim_m0::viz::VizFrame {
-                        tick,
-                        pieces: world.piece_positions(),
-                        scores: world.scores,
-                        held: world.held.clone(),
-                        match_state: world.match_clock.phase_at(tick),
-                        match_time: world.match_clock.time_remaining(tick),
-                    });
-                    // periodic flush so a killed server loses at most ~1 s
-                    if tick % PHYSICS_HZ as u64 == 0 {
-                        if let Some(w) = log.as_mut() {
-                            let _ = w.flush();
-                        }
-                        if let Some(p) = &proto_log {
-                            p.flush();
-                        }
+                        p.flush();
                     }
                 }
                 tick += 1;
             }
         });
+    }
+
+    // match control channel (issue #33)
+    if args.control_port != 0 {
+        let listener = TcpListener::bind(("127.0.0.1", args.control_port)).await?;
+        println!("match control on ws://127.0.0.1:{}", args.control_port);
+        tokio::spawn(frc_sim_m0::control::serve(listener, world.clone()));
     }
 
     let listener = TcpListener::bind("127.0.0.1:9770").await?;
