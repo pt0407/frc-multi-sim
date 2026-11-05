@@ -105,6 +105,7 @@ impl Policy for LinearPolicy {
             modules: None,
             intake_active: out[0].abs() < 0.5, // stub heuristic: intake while not driving hard
             shoot: None,
+            mech: None,
         }
     }
 }

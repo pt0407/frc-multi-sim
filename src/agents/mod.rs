@@ -133,6 +133,7 @@ mod tests {
                 modules: None,
                 intake_active: false,
                 shoot: None,
+                mech: None,
             },
         );
         assert!(slots.snapshot()[0].is_some());

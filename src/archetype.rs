@@ -30,6 +30,11 @@ pub struct Archetype {
     /// everything; otherwise the server warns on a mismatch.
     #[serde(default)]
     pub compatible_games: Vec<String>,
+    /// optional `[mech]` articulated mechanism (issue #57 spike): a
+    /// revolute-jointed arm rigid body attached to the chassis. `None` =
+    /// single rigid body, identical to today.
+    #[serde(default)]
+    pub mech: Option<MechSpec>,
     /// optional `[model]` visual asset (issue #43): GLB the web client
     /// renders instead of the fallback box. Display-only — physics stays
     /// authoritative on `mass`/`half_extents`.
@@ -101,6 +106,45 @@ pub struct IntakeSpec {
     /// capture region vertical bounds relative to chassis center
     pub y_min: f32,
     pub y_max: f32,
+}
+
+/// Articulated mechanism spec (issue #57 spike): ONE revolute arm hung off
+/// the chassis — the intake-arm pattern. The arm is a cuboid rigid body
+/// pinned to `pivot` (chassis frame, +x forward, +y up) by a revolute
+/// joint about the lateral z axis, position-servoed to
+/// `ActuatorFrame::mech.target`. The arm extends `half_extents[0]` along
+/// its local +x from the pivot at angle 0; positive angle swings it up,
+/// negative down toward the floor in front of the bumper.
+///
+/// ```toml
+/// [mech]
+/// pivot = [0.40, 0.35, 0.0]        # front-top chassis corner
+/// half_extents = [0.45, 0.03, 0.35] # 0.9 m bar, 0.7 m wide
+/// mass = 4.0
+/// stow_angle = 1.3                 # rad, tipped up over the bumper
+/// limits = [-0.8, 1.4]             # rad
+/// motor_stiffness = 300.0          # N*m/rad
+/// motor_damping = 30.0
+/// motor_max_force = 400.0          # N*m
+/// ```
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
+pub struct MechSpec {
+    /// chassis-frame pivot point [x, y, z]
+    pub pivot: [f32; 3],
+    /// arm cuboid half-extents [x, y, z]; x is along the arm
+    pub half_extents: [f32; 3],
+    /// arm mass, kg
+    pub mass: f32,
+    /// initial joint angle (stowed), rad
+    pub stow_angle: f32,
+    /// revolute joint limits [min, max], rad
+    pub limits: [f32; 2],
+    /// position-servo stiffness (ForceBased motor model)
+    pub motor_stiffness: f32,
+    /// position-servo damping
+    pub motor_damping: f32,
+    /// max motor torque, N*m
+    pub motor_max_force: f32,
 }
 
 impl Archetype {

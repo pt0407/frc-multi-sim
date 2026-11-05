@@ -15,6 +15,7 @@ fn cmd(force: [f32; 2]) -> ActuatorFrame {
         modules: None,
         intake_active: false,
         shoot: None,
+        mech: None,
     }
 }
 

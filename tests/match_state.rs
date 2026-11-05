@@ -20,6 +20,7 @@ fn cmd() -> ActuatorFrame {
         modules: None,
         intake_active: false,
         shoot: None,
+        mech: None,
     }
 }
 

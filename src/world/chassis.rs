@@ -3,7 +3,7 @@
 //! `RobotSpec` is the spawn-time physical description of one robot — what an
 //! archetype config resolves to. Spawn pose is stored per-spec so replay
 //! headers can carry the exact initial conditions.
-use crate::archetype::{Archetype, IntakeSpec, ModelSpec};
+use crate::archetype::{Archetype, IntakeSpec, MechSpec, ModelSpec};
 use crate::world::noise::SensorConfig;
 use rapier3d::prelude::*;
 
@@ -31,6 +31,9 @@ pub struct RobotSpec {
     /// optional visual GLB reference (issue #43); display-only, never
     /// affects physics or the replay config hash
     pub model: Option<ModelSpec>,
+    /// optional articulated mechanism (issue #57 spike); `None` = the
+    /// classic single rigid body
+    pub mech: Option<MechSpec>,
 }
 
 impl RobotSpec {
@@ -43,6 +46,7 @@ impl RobotSpec {
             intake: None,
             sensors: SensorConfig::default(),
             model: None,
+            mech: None,
         }
     }
 
@@ -55,6 +59,7 @@ impl RobotSpec {
             intake: a.intake,
             sensors: a.sensors.resolved(),
             model: a.model.clone(),
+            mech: a.mech,
         }
     }
 }

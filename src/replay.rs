@@ -362,6 +362,9 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
                         // visual-only (issue #43); not serialized into
                         // replay headers, replays reconstruct it as absent
                         model: None,
+                        // mechanisms not yet serialized into replay
+                        // headers (issue #57 spike follow-up)
+                        mech: None,
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
@@ -488,6 +491,9 @@ fn read_cmd_record(r: &mut impl Read, fmt: u32) -> Result<Record> {
             modules,
             intake_active,
             shoot,
+            // mech commands are not yet in the replay record format
+            // (issue #57 spike follow-up); replays hold the last target
+            mech: None,
         })
     } else {
         None

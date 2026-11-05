@@ -32,6 +32,7 @@ fn two_robots_collide_and_match_golden() {
             modules: None,
             intake_active: false,
             shoot: None,
+            mech: None,
         }),
         Some(ActuatorFrame {
             force: [-PUSH_FORCE, 0.0],
@@ -39,6 +40,7 @@ fn two_robots_collide_and_match_golden() {
             modules: None,
             intake_active: false,
             shoot: None,
+            mech: None,
         }),
     ];
 

@@ -405,6 +405,7 @@ mod tests {
             modules: None,
             intake_active: false,
             shoot: None,
+            mech: None,
         });
         let obs = b.build(0, &f, &w);
         let tail = &obs[obs.len() - 6..];

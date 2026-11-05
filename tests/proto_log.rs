@@ -37,6 +37,7 @@ fn envelopes_roundtrip() {
                 modules: None,
                 intake_active: true,
                 shoot: None,
+                mech: None,
             }),
         );
         log.log_raw(0, Dir::In, "not json at all");

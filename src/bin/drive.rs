@@ -99,6 +99,7 @@ async fn main() -> Result<()> {
                 modules: None,
                 intake_active: false,
                 shoot: None,
+                mech: None,
             }))
             .unwrap()
             .into(),

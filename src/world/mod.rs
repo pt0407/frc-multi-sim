@@ -4,6 +4,7 @@
 //! simulation deterministic and replayable (issue #5).
 pub mod chassis;
 pub mod field;
+pub mod mech;
 pub mod noise;
 pub mod pieces;
 
@@ -68,6 +69,9 @@ pub struct World {
     match_finished: bool,
     /// per-robot sensor noise/latency models (issue #7); drawn from `rng`
     sensors: Vec<SensorNoise>,
+    /// per-robot articulated mechanism (issue #57 spike): `Some` only for
+    /// specs that opt in via `[mech]`; `None` robots stay single-body
+    pub mechs: Vec<Option<mech::Mech>>,
 }
 
 impl World {
@@ -129,6 +133,7 @@ impl World {
             score_by_phase: [PhaseScore::default(); 2],
             match_finished: false,
             sensors: Vec::new(),
+            mechs: Vec::new(),
         };
 
         field::build_arena(&w.field, &mut w.bodies, &mut w.colliders);
@@ -144,9 +149,25 @@ impl World {
                 chassis::spawn_chassis(&mut w.bodies, &mut w.colliders, spec);
             w.chassis.push(body);
             w.chassis_colliders.push(col);
+            if let Some(mspec) = &spec.mech {
+                let m = mech::spawn_arm(
+                    &mut w.bodies,
+                    &mut w.colliders,
+                    &mut w.impulse_joints,
+                    body,
+                    mspec,
+                );
+                w.mechs.push(Some(m));
+            } else {
+                w.mechs.push(None);
+            }
             println!(
-                "robot {} spawned at x={} mass={} half={:?}",
-                i, spec.spawn[0], spec.mass, spec.half_extents
+                "robot {} spawned at x={} mass={} half={:?} mech={}",
+                i,
+                spec.spawn[0],
+                spec.mass,
+                spec.half_extents,
+                spec.mech.is_some()
             );
         }
         // per-boot sensor biases draw from the world RNG in robot order
@@ -193,6 +214,7 @@ impl World {
                 modules: None,
                 intake_active: false,
                 shoot: None,
+                mech: None,
             };
             let cmd = cmd.unwrap_or(&zero);
             {
@@ -216,6 +238,23 @@ impl World {
                     dt: self.integration.dt,
                 };
                 self.intake_active[i] = cmd.intake_active;
+                // mechanism servo (issue #57 spike): retarget the arm's
+                // revolute motor when the agent commands it; target is
+                // clamped to the spec's joint limits
+                if let (Some(mcmd), Some(m)) =
+                    (cmd.mech, self.mechs.get_mut(i).and_then(|m| m.as_mut()))
+                {
+                    let target =
+                        mcmd.target.clamp(m.spec.limits[0], m.spec.limits[1]);
+                    if let Some(j) = self.impulse_joints.get_mut(m.joint) {
+                        j.data.set_motor_position(
+                            JointAxis::AngX,
+                            target,
+                            m.spec.motor_stiffness,
+                            m.spec.motor_damping,
+                        );
+                    }
+                }
                 // shooter: consume a held piece and spawn a ballistic fuel
                 // (FuelSim launchFuel: hood angle, turret yaw, launch height,
                 // plus chassis velocity)
@@ -397,6 +436,22 @@ impl World {
                 true,
             );
         }
+    }
+
+    /// Arm joint angle for mechanism telemetry/tests (issue #57 spike).
+    /// `None` when the robot has no `[mech]`.
+    pub fn mech_angle(&self, robot: usize) -> Option<f32> {
+        self.mechs[robot]
+            .as_ref()
+            .map(|m| mech::arm_angle(&self.bodies, m.arm))
+    }
+
+    /// World position of the mechanism arm's center of mass (viz/tests).
+    pub fn mech_arm_position(&self, robot: usize) -> Option<[f32; 3]> {
+        self.mechs[robot].as_ref().map(|m| {
+            let t = self.bodies[m.arm].translation();
+            [t.x, t.y, t.z]
+        })
     }
 
     /// Ground-truth extraction + orchestrator-side sensor filtering (issue

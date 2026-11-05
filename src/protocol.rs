@@ -83,6 +83,20 @@ pub struct ActuatorFrame {
     /// optional one-shot ballistic launch; consumes one held piece (issue #3)
     #[serde(default)]
     pub shoot: Option<ShotCommand>,
+    /// optional articulated-mechanism command (issue #57, SPIKE): joint
+    /// target for the robot's `[mech]` arm. `None` = leave the mechanism
+    /// at its last target (legacy agents see no behavior change). Only has
+    /// an effect when the archetype declares a `[mech]` section.
+    #[serde(default)]
+    pub mech: Option<MechCommand>,
+}
+
+/// Mechanism actuator command (issue #57 spike): position-servo target for
+/// the robot's articulated arm joint.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct MechCommand {
+    /// revolute joint target angle, radians, clamped to the spec's limits
+    pub target: f32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -129,6 +143,7 @@ mod tests {
                 turret_yaw: 0.0,
                 launch_height: 0.5,
             }),
+            mech: Some(MechCommand { target: -0.5 }),
         });
         let s = serde_json::to_string(&m).unwrap();
         eprintln!("{}", s);

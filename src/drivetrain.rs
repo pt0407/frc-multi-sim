@@ -389,6 +389,7 @@ mod tests {
             modules: None,
             intake_active: false,
             shoot: None,
+            mech: None,
         };
         let out = d.resolve(&cmd, &kin(0.7));
         assert_eq!(out.len(), 1);
@@ -407,6 +408,7 @@ mod tests {
             modules: None,
             intake_active: false,
             shoot: None,
+            mech: None,
         };
         let out = d.resolve(&cmd, &kin(0.0));
         assert_eq!(out.len(), 4);
@@ -432,6 +434,7 @@ mod tests {
             modules: None,
             intake_active: false,
             shoot: None,
+            mech: None,
         };
         let out = d.resolve(&cmd, &kin(0.0));
         let total: f32 = out
@@ -456,6 +459,7 @@ mod tests {
             ]),
             intake_active: false,
             shoot: None,
+            mech: None,
         };
         let out = d.resolve(&cmd, &kin(std::f32::consts::FRAC_PI_2));
         for f in &out {
