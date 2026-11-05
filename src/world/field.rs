@@ -133,6 +133,17 @@ pub struct FieldSpec {
     /// placeholder climb points (no colliders)
     #[serde(default)]
     pub climb_points: Vec<ClimbPointSpec>,
+    /// optional GLB field mesh (issue #42): emitted to viz as a static
+    /// asset URL so the client renders the real field. Path relative to
+    /// the process CWD.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub glb: Option<String>,
+    /// opt-in: use the GLB's filtered primitives as trimesh colliders,
+    /// replacing `obstacles` (ground+walls stay). The full field is ~1.8M
+    /// triangles — ~70 s debug startup, ~50 Hz sim in release — so it's a
+    /// validation option until collider LOD work lands. Default false.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub glb_colliders: Option<bool>,
 }
 
 impl Default for FieldSpec {
@@ -181,6 +192,8 @@ impl Default for FieldSpec {
             obstacles: Vec::new(),
             scoring_zones: Vec::new(),
             climb_points: Vec::new(),
+            glb: None,
+            glb_colliders: None,
         }
     }
 }

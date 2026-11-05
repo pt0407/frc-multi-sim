@@ -1,6 +1,7 @@
 pub mod agents;
 pub mod archetype;
 pub mod config;
+pub mod glb;
 pub mod debug_nt;
 pub mod drivetrain;
 pub mod r#match;

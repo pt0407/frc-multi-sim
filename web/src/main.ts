@@ -8,9 +8,11 @@ import {
   MeshBuilder,
   Quaternion,
   Scene,
+  SceneLoader,
   StandardMaterial,
   Vector3,
 } from "@babylonjs/core";
+import "@babylonjs/loaders/glTF";
 
 const WS_URL = `ws://${location.hostname}:9771`;
 
@@ -30,6 +32,7 @@ interface ConfigMsg {
     wall_thick: number;
     walls?: WallSpec[];
     obstacles?: ObstacleSpec[];
+    glb_url?: string | null;
   };
   robot: { half_extents: number };
 }
@@ -43,6 +46,11 @@ interface StateMsg {
     linvel: [number, number, number];
     contact_impulse: number;
   }[];
+  pieces?: [number, number, number][];
+  scores?: [number, number];
+  held?: number[];
+  match_state?: string;
+  match_time?: number;
 }
 type Msg = ConfigMsg | StateMsg;
 
@@ -59,13 +67,55 @@ new HemisphericLight("light", new Vector3(0.3, 1, 0.2), scene);
 const ROBOT_COLORS = [Color3.Red(), new Color3(0.2, 0.4, 1), new Color3(0, 0.8, 0.4), Color3.Yellow()];
 
 const robots = new Map<number, Mesh>();
+const pieces: Mesh[] = [];
 let robotHalf = 0.4;
 let fieldCfg: ConfigMsg["field"] | null = null;
 let built = false;
 
+const MAX_PIECES = 200;
+
+function pieceMesh(i: number): Mesh {
+  while (pieces.length <= i) {
+    const m = MeshBuilder.CreateSphere(`piece-${pieces.length}`, { diameter: 0.3, segments: 8 }, scene);
+    const mat = new StandardMaterial(`pm-${pieces.length}`, scene);
+    mat.diffuseColor = new Color3(1.0, 0.55, 0.1);
+    m.material = mat;
+    pieces.push(m);
+  }
+  return pieces[i];
+}
+
+async function tryLoadFieldGlb(url: string): Promise<boolean> {
+  try {
+    const res = await SceneLoader.ImportMeshAsync("", location.origin, url, scene);
+    // staged Fuel props in the field model are sim-owned — hide them
+    for (const m of res.meshes) {
+      if (/fuel/i.test(m.name)) m.setEnabled(false);
+    }
+    console.log(`field GLB loaded: ${res.meshes.length} meshes`);
+    return true;
+  } catch (e) {
+    console.warn(`field GLB ${url} failed, using primitives:`, e);
+    return false;
+  }
+}
+
 function buildField() {
   if (!fieldCfg || built) return;
   built = true;
+  const glbUrl = fieldCfg.glb_url;
+  if (glbUrl) {
+    // primitives are the fallback if the GLB 404s/fails to parse
+    tryLoadFieldGlb(glbUrl).then((ok) => {
+      if (!ok) buildPrimitives();
+    });
+    return;
+  }
+  buildPrimitives();
+}
+
+function buildPrimitives() {
+  if (!fieldCfg) return;
   const { half_x, half_z, wall_height, wall_thick } = fieldCfg;
 
   const ground = MeshBuilder.CreateGround("ground", { width: half_x * 2, height: half_z * 2 }, scene);
@@ -147,7 +197,26 @@ function connect() {
       buildField();
       return;
     }
+    // game pieces (free ones only; held/scored are not in the list)
+    const plist = msg.pieces ?? [];
+    for (let i = 0; i < MAX_PIECES; i++) {
+      const m = pieces[i];
+      if (!m) break;
+      if (i < plist.length) {
+        m.setEnabled(true);
+        m.position.set(plist[i][0], plist[i][1] + 0.15, plist[i][2]);
+      } else {
+        m.setEnabled(false);
+      }
+    }
+
     let lines = [`tick ${msg.tick}`];
+    if (msg.match_state) {
+      lines.push(
+        `${msg.match_state} ${msg.match_time?.toFixed(1) ?? "?"}s` +
+          (msg.scores ? `  score ${msg.scores[0]}-${msg.scores[1]}` : ""),
+      );
+    }
     for (const r of msg.robots) {
       const m = robotMesh(r.id);
       m.position.set(r.position[0], r.position[1], r.position[2]);

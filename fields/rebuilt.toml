@@ -8,6 +8,14 @@ name = "rebuilt-2026"
 half_x = 8.2705   # meters; fieldcore reference field is 16.541 x 8.069 (issue #44)
 half_z = 4.0345
 
+# GLB field mesh (issue #42): the official AdvantageScope 2026 REBUILT
+# model — rendered by the viz client (real geometry, ~17 MB).
+glb = "assets/fields/rebuilt2026/field.glb"
+# Set true to also use its ~1.8M filtered triangles as trimesh colliders
+# replacing `obstacles`. Expensive (~50 Hz release, ~70 s debug startup);
+# validation option until collider LOD work lands.
+glb_colliders = false
+
 [ground]
 half_extents = [20.0, 0.1, 20.0]
 pos          = [0.0, -0.1, 0.0]
@@ -45,8 +53,8 @@ friction     = 0.82
 restitution  = 0.08
 
 # --- obstacles -----------------------------------------------------------
-# REBUILT-flavored structures near the field edges (midfield kept clear so
-# the stock two-robot collision scenario is unaffected).
+# FALLBACK ONLY when `glb` is absent/unloadable: REBUILT-flavored
+# structures near the field edges approximating the real geometry.
 
 [[obstacles]]
 kind         = "box"

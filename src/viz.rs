@@ -44,6 +44,12 @@ fn config_msg(field: &FieldSpec) -> String {
         .iter()
         .map(|w| w.half_extents[1] * 2.0)
         .fold(0.0f32, f32::max);
+    // issue #42: spec paths like "assets/fields/x.glb" are served by vite's
+    // publicDir ('../assets'), so the URL drops the leading "assets/".
+    let glb_url = field.glb.as_ref().map(|p| {
+        let rel = p.strip_prefix("assets/").unwrap_or(p);
+        format!("/{rel}")
+    });
     json!({
         "type": "config",
         "field": {
@@ -56,6 +62,7 @@ fn config_msg(field: &FieldSpec) -> String {
             "obstacles": field.obstacles,
             "scoring_zones": field.scoring_zones,
             "climb_points": field.climb_points,
+            "glb_url": glb_url,
         },
         "robot": { "half_extents": 0.4 },
     })
