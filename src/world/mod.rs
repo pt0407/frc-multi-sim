@@ -395,6 +395,7 @@ impl World {
         let av = body.angvel();
         // robot-vs-robot contacts only (filter out ground/walls);
         // aggregated across every other chassis
+        // real solver impulse (N·s), not a manifold point count (issue #27)
         let contact_impulse: f32 = self
             .chassis_colliders
             .iter()
@@ -404,10 +405,10 @@ impl World {
                 self.narrow_phase
                     .contact_pairs_with(self.chassis_colliders[robot])
                     .filter(|p| p.collider1 == *other || p.collider2 == *other)
-                    .map(|p| p.manifolds.iter().map(|m| m.points.len()).sum::<usize>())
-                    .sum::<usize>()
+                    .map(|p| p.total_impulse_magnitude())
+                    .sum::<f32>()
             })
-            .sum::<usize>() as f32;
+            .sum::<f32>();
         let mut frame = SensorFrame {
             tick,
             position: [t.x, t.y, t.z],

@@ -11,8 +11,9 @@ use tokio_tungstenite::tungstenite::Message;
 struct Args {
     #[arg(long)]
     robot_id: usize,
-    /// waypoint [x,z] the simple P-controller drives toward
-    #[arg(long, num_args = 2, allow_hyphen_values = true)]
+    /// waypoint [x,z] the simple P-controller drives toward (default:
+    /// field center; issue #28 — must not panic when omitted)
+    #[arg(long, num_args = 2, allow_hyphen_values = true, default_values = ["0.0", "0.0"])]
     target: Vec<f32>,
     /// hold position after reaching waypoint (plays defense)
     #[arg(long, default_value_t = false)]

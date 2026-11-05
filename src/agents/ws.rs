@@ -69,6 +69,20 @@ async fn handle_conn(
                         .await;
                     return;
                 }
+                // duplicate robot_id takeover (issue #29): reject loudly
+                // instead of silently stealing the command slot
+                if !commands.try_claim_ws(robot_id) {
+                    let err = ServerMsg::Error {
+                        message: format!(
+                            "robot_id {robot_id} already claimed by another agent"
+                        ),
+                    };
+                    eprintln!("agent {addr} rejected: {err:?}");
+                    let _ = sink
+                        .send(Message::Text(serde_json::to_string(&err).unwrap().into()))
+                        .await;
+                    return;
+                }
                 robot_id
             }
             _ => return,
@@ -76,7 +90,6 @@ async fn handle_conn(
         _ => return,
     };
     println!("agent {} connected -> robot {}", addr, robot_id);
-    commands.set_ws_connected(robot_id, true);
     sink.send(Message::Text(
         serde_json::to_string(&ServerMsg::Welcome {
             robot_id,
