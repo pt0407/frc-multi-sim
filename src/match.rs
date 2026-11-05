@@ -59,7 +59,7 @@ impl MatchPhase {
 /// Per-phase score breakdown for one alliance (issue #10). `World::scores`
 /// stays the running total; this attributes each hub point (and the
 /// endgame climb bonus) to the phase it was scored in.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PhaseScore {
     pub auto: u32,
     pub teleop: u32,

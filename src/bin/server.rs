@@ -66,6 +66,10 @@ struct Args {
     /// --record (physics replay) — this captures protocol traffic.
     #[arg(long)]
     proto_log: Option<std::path::PathBuf>,
+    /// Match control channel port (issue #33): JSON WS API for
+    /// set_phase / clear_phase / add_score / status. 0 disables.
+    #[arg(long, default_value_t = 9772)]
+    control_port: u16,
     /// Robot slots driven by the in-process RL policy agent (issue #12).
     /// Repeatable, e.g. --policy 0 --policy 2 --policy 4. These slots run
     /// the deterministic linear-stub policy behind the `Policy` trait;
@@ -226,6 +230,9 @@ async fn main() -> Result<()> {
     );
     let mut world = World::with_config(&specs, cfg.seed, field.clone(), &piece_table);
     world.match_clock = frc_sim_m0::r#match::MatchClock::new(match_cfg);
+    // shared with the control channel (issue #33); the physics loop locks
+    // it briefly each step — step() is fully synchronous
+    let world = Arc::new(std::sync::Mutex::new(world));
 
     // optional event log: header first, then per-tick records in the loop
     let mut log = match &cfg.record {
@@ -347,6 +354,8 @@ async fn main() -> Result<()> {
         let commands = commands.clone();
         let sensor_tx = sensor_tx.clone();
         let proto_log = proto_log.clone();
+        let world_tx = world_tx.clone();
+        let world = world.clone();
         let mode = cfg.time_mode;
         let mut policy_agents = policy_agents;
         let mut exp_log = exp_log;
@@ -402,74 +411,84 @@ async fn main() -> Result<()> {
                     }
                 }
                 last_cmds = cmds.clone();
-                world.step(&cmds);
-                if tick % AGENT_EVERY as u64 == 0 {
-                    // entity snapshot shared by all policy agents this
-                    // agent tick (taken before sensor_frame's &mut borrows)
-                    let obs_world = if policy_agents.is_empty() {
-                        None
-                    } else {
-                        Some(world.obs_world())
-                    };
-                    let mut frames: Vec<Option<SensorFrame>> =
-                        (0..num_robots).map(|_| None).collect();
-                    for r in 0..num_robots {
-                        let frame = world.sensor_frame(r, tick);
-                        if let Some(w) = log.as_mut() {
-                            let _ = w.record(&Record::State {
-                                tick,
-                                robot: r as u32,
-                                sample: replay::StateSample::from(&frame),
-                            });
+                {
+                    let mut world = world.lock().unwrap();
+                    world.step(&cmds);
+                    if tick % AGENT_EVERY as u64 == 0 {
+                        // entity snapshot shared by all policy agents this
+                        // agent tick (taken before sensor_frame's &mut borrows)
+                        let obs_world = if policy_agents.is_empty() {
+                            None
+                        } else {
+                            Some(world.obs_world())
+                        };
+                        let mut frames: Vec<Option<SensorFrame>> =
+                            (0..num_robots).map(|_| None).collect();
+                        for r in 0..num_robots {
+                            let frame = world.sensor_frame(r, tick);
+                            if let Some(w) = log.as_mut() {
+                                let _ = w.record(&Record::State {
+                                    tick,
+                                    robot: r as u32,
+                                    sample: replay::StateSample::from(&frame),
+                                });
+                            }
+                            frames[r] = Some(frame.clone());
+                            let _ = sensor_tx.send((r, frame));
                         }
-                        frames[r] = Some(frame.clone());
-                        let _ = sensor_tx.send((r, frame));
-                    }
-                    if let Some(p) = &proto_log {
-                        p.note_tick(tick);
-                    }
-                    // policy agents: filtered frame + shared snapshot ->
-                    // command + experience row (deterministic, issue #12)
-                    if let Some(ow) = &obs_world {
-                        for agent in policy_agents.iter_mut() {
-                            if let Some(frame) = &frames[agent.robot] {
-                                let (cmd, exp) = agent.tick(frame, ow);
-                                commands.set(agent.robot, cmd);
-                                if let Some(l) = exp_log.as_mut() {
-                                    let _ = l.log(&exp);
+                        if let Some(p) = &proto_log {
+                            p.note_tick(tick);
+                        }
+                        // policy agents: filtered frame + shared snapshot ->
+                        // command + experience row (deterministic, issue #12)
+                        if let Some(ow) = &obs_world {
+                            for agent in policy_agents.iter_mut() {
+                                if let Some(frame) = &frames[agent.robot] {
+                                    let (cmd, exp) = agent.tick(frame, ow);
+                                    commands.set(agent.robot, cmd);
+                                    if let Some(l) = exp_log.as_mut() {
+                                        let _ = l.log(&exp);
+                                    }
                                 }
                             }
                         }
+                        // spectator piece/score stream (~50 Hz source; the viz
+                        // republishes at 30 Hz)
+                        let _ = world_tx.send(frc_sim_m0::viz::VizFrame {
+                            tick,
+                            pieces: world.piece_positions(),
+                            scores: world.scores,
+                            held: world.held.clone(),
+                            match_state: world.match_clock.phase_at(tick),
+                            match_time: world.match_clock.time_remaining(tick),
+                            mech_angles: (0..world.num_robots())
+                                .map(|r| world.mech_angle(r))
+                                .collect(),
+                        });
                     }
-                    // spectator piece/score stream (~50 Hz source; the viz
-                    // republishes at 30 Hz)
-                    let _ = world_tx.send(frc_sim_m0::viz::VizFrame {
-                        tick,
-                        pieces: world.piece_positions(),
-                        scores: world.scores,
-                        held: world.held.clone(),
-                        match_state: world.match_clock.phase_at(tick),
-                        match_time: world.match_clock.time_remaining(tick),
-                        mech_angles: (0..world.num_robots())
-                            .map(|r| world.mech_angle(r))
-                            .collect(),
-                    });
-                    // periodic flush so a killed server loses at most ~1 s
-                    if tick % PHYSICS_HZ as u64 == 0 {
-                        if let Some(w) = log.as_mut() {
-                            let _ = w.flush();
-                        }
-                        if let Some(p) = &proto_log {
-                            p.flush();
-                        }
-                        if let Some(l) = exp_log.as_mut() {
-                            let _ = l.flush();
-                        }
+                }
+                // periodic flush so a killed server loses at most ~1 s
+                if tick % PHYSICS_HZ as u64 == 0 {
+                    if let Some(w) = log.as_mut() {
+                        let _ = w.flush();
+                    }
+                    if let Some(p) = &proto_log {
+                        p.flush();
+                    }
+                    if let Some(l) = exp_log.as_mut() {
+                        let _ = l.flush();
                     }
                 }
                 tick += 1;
             }
         });
+    }
+
+    // match control channel (issue #33)
+    if args.control_port != 0 {
+        let listener = TcpListener::bind(("127.0.0.1", args.control_port)).await?;
+        println!("match control on ws://127.0.0.1:{}", args.control_port);
+        tokio::spawn(frc_sim_m0::control::serve(listener, world.clone()));
     }
 
     let listener = TcpListener::bind("127.0.0.1:9770").await?;

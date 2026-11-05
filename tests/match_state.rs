@@ -215,3 +215,49 @@ fn scoring_is_attributed_to_phase_and_climb_bonus_lands() {
     // robot 1 (alliance 1, far from any climb point) got nothing
     assert_eq!(w.scores[1], 0);
 }
+
+#[test]
+fn phase_override_holds_expires_and_scores() {
+    // issue #33: manual phase override for rehearsals / viz demos
+    let cfg = quick_match();
+    let mut w = World::with_config(
+        &chassis::default_specs(),
+        SEED,
+        FieldSpec::default(),
+        &PieceTable::default(),
+    );
+    w.match_clock = MatchClock::new(cfg);
+
+    // hold Endgame indefinitely (secs=0)
+    w.set_phase(MatchPhase::Endgame, 0.0);
+    assert_eq!(w.phase(), MatchPhase::Endgame);
+    assert!(w.phase_override_active());
+    let tr = w.time_remaining();
+    assert!(tr > 1e6, "indefinite hold should report huge time_remaining, got {tr}");
+    for _ in 0..50 {
+        w.step(&[None, None]);
+    }
+    assert_eq!(w.phase(), MatchPhase::Endgame, "override must persist");
+
+    // timed override: 0.2 s teleop = 80 ticks at 400 Hz
+    w.set_phase(MatchPhase::Teleop, 0.2);
+    for _ in 0..70 {
+        w.step(&[None, None]);
+    }
+    assert_eq!(w.phase(), MatchPhase::Teleop);
+    for _ in 0..20 {
+        w.step(&[None, None]);
+    }
+    // override expired: clock resumes (we're still inside disabled_s=0.05? no —
+    // 140+ ticks elapsed > 20-tick disabled, so auto)
+    assert_eq!(w.phase(), MatchPhase::Auto);
+    assert!(!w.phase_override_active());
+
+    // manual score lands in the current phase bucket
+    w.set_phase(MatchPhase::Endgame, 0.0);
+    w.add_score(0, 25);
+    assert_eq!(w.scores[0], 25);
+    assert_eq!(w.score_by_phase[0].endgame, 25);
+    w.clear_phase();
+    assert!(!w.phase_override_active());
+}
