@@ -5,6 +5,7 @@
 //! Babylon.js client in `web/`.
 
 use anyhow::Result;
+use crate::world::field::FieldSpec;
 use crate::SensorFrame;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
@@ -17,12 +18,29 @@ use tokio_tungstenite::tungstenite::Message;
 const VIZ_PORT: u16 = 9771;
 const VIZ_HZ: f32 = 30.0;
 
-/// Field geometry mirrors the constants in server.rs so the client can lay
-/// out the floor/walls before the first state packet arrives.
-fn config_msg() -> String {
+/// Emit the loaded field layout (issue #14) so web clients can render the
+/// real geometry — dims, wall segments, and obstacles — before the first
+/// state packet arrives. `wall_height`/`wall_thick` are kept for older
+/// clients that only know the legacy four-wall layout.
+fn config_msg(field: &FieldSpec) -> String {
+    let wall_height = field
+        .walls
+        .iter()
+        .map(|w| w.half_extents[1] * 2.0)
+        .fold(0.0f32, f32::max);
     json!({
         "type": "config",
-        "field": { "half_x": 8.25, "half_z": 4.0, "wall_height": 0.6, "wall_thick": 0.1 },
+        "field": {
+            "name": field.name,
+            "half_x": field.half_x,
+            "half_z": field.half_z,
+            "wall_height": wall_height,
+            "wall_thick": 0.1,
+            "walls": field.walls,
+            "obstacles": field.obstacles,
+            "scoring_zones": field.scoring_zones,
+            "climb_points": field.climb_points,
+        },
         "robot": { "half_extents": 0.4 },
     })
     .to_string()
@@ -74,7 +92,10 @@ async fn state_collector(
 
 /// Runs forever: binds the spectator socket and fans world state out to all
 /// connected clients. Spawn once from main.
-pub async fn run(sensor_tx: broadcast::Sender<(usize, SensorFrame)>) -> Result<()> {
+pub async fn run(
+    sensor_tx: broadcast::Sender<(usize, SensorFrame)>,
+    field: FieldSpec,
+) -> Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", VIZ_PORT)).await?;
     println!("spectator stream listening on ws://127.0.0.1:{VIZ_PORT}");
 
@@ -84,7 +105,7 @@ pub async fn run(sensor_tx: broadcast::Sender<(usize, SensorFrame)>) -> Result<(
     loop {
         let (stream, addr) = listener.accept().await?;
         let mut rx = viz_tx.subscribe();
-        let cfg = config_msg();
+        let cfg = config_msg(&field);
         tokio::spawn(async move {
             let Ok(ws) = tokio_tungstenite::accept_async(stream).await else {
                 return;

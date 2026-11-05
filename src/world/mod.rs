@@ -6,7 +6,7 @@ pub mod chassis;
 pub mod field;
 
 pub use chassis::{RobotSpec, NUM_ROBOTS, ROBOT_HALF, ROBOT_MASS};
-pub use field::{FIELD_HALF_X, FIELD_HALF_Z};
+pub use field::{FieldSpec, FIELD_HALF_X, FIELD_HALF_Z};
 
 use crate::drivetrain::{rot2, yaw_from_quat, Drivetrain};
 use crate::rng::SimRng;
@@ -35,6 +35,9 @@ pub struct World {
     /// Seeded RNG — the only legal source of randomness in world code
     /// (PLAN §0). Currently unused; piece spawns / sensor noise draw here.
     pub rng: SimRng,
+    /// The field layout this world was built from (issue #14); viz reads
+    /// it to emit the config message, and it feeds the replay config hash.
+    pub field: FieldSpec,
 }
 
 impl World {
@@ -47,6 +50,13 @@ impl World {
     /// the world's `SimRng`; the same seed + same inputs always produce the
     /// same trajectory.
     pub fn with_specs(specs: &[RobotSpec], seed: u64) -> Self {
+        Self::with_field(specs, FieldSpec::default(), seed)
+    }
+
+    /// Same as `with_specs` but builds the arena from a loaded field spec
+    /// (issue #14). `World::new`/`with_specs` keep the historical default
+    /// layout so existing callers and replays are unchanged.
+    pub fn with_field(specs: &[RobotSpec], field: FieldSpec, seed: u64) -> Self {
         let mut w = World {
             pipeline: PhysicsPipeline::new(),
             gravity: vector![0.0, -9.81, 0.0],
@@ -73,9 +83,10 @@ impl World {
                 .map(|s| Drivetrain::swerve(s.mass, s.half_extents[0]))
                 .collect(),
             rng: SimRng::seeded(seed),
+            field,
         };
 
-        field::build_arena(&mut w.bodies, &mut w.colliders);
+        field::build_arena(&w.field, &mut w.bodies, &mut w.colliders);
 
         for (i, spec) in specs.iter().enumerate() {
             let (body, col) =
