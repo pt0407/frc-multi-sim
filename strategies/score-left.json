@@ -1,0 +1,12 @@
+{
+  "name": "score-left",
+  "actions": [
+    {"type": "intake", "active": true},
+    {"type": "goto", "x": -2.0, "z": 0.5},
+    {"type": "goto", "x": -3.2, "z": 0.0},
+    {"type": "shoot", "launch_velocity": 9.0, "hood_angle": 0.85, "turret_yaw": 0.0, "launch_height": 0.5},
+    {"type": "goto", "x": -1.0, "z": 0.0},
+    {"type": "intake", "active": false},
+    {"type": "hold"}
+  ]
+}

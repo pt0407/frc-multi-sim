@@ -1,0 +1,11 @@
+{
+  "name": "center-rush",
+  "actions": [
+    {"type": "intake", "active": true},
+    {"type": "goto", "x": 0.0, "z": 0.0},
+    {"type": "wait", "seconds": 2.0},
+    {"type": "goto", "x": -3.4, "z": 0.0},
+    {"type": "shoot", "launch_velocity": 9.5, "hood_angle": 0.9, "turret_yaw": 0.0, "launch_height": 0.5},
+    {"type": "hold"}
+  ]
+}
