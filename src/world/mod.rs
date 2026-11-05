@@ -492,6 +492,7 @@ impl World {
             match_state: self.match_clock.phase_at(tick),
             match_time: self.match_clock.time_remaining(tick),
             vision_pose: None,
+            mech_angle: self.mech_angle(robot),
         };
         // noise layer: no-op (and zero RNG draws) when disabled
         let true_pos = frame.position;

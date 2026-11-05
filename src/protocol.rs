@@ -42,6 +42,10 @@ pub struct SensorFrame {
     /// compatible: absent in serialized frames it deserializes to `None`.
     #[serde(default)]
     pub vision_pose: Option<[f32; 3]>,
+    /// mechanism arm joint angle in radians (issue #57); None when the
+    /// robot has no mechanism
+    #[serde(default)]
+    pub mech_angle: Option<f32>,
 }
 
 /// What an agent sends back. In a real adapter these are per-wheel/module

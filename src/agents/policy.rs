@@ -240,6 +240,7 @@ mod tests {
             match_state: MatchPhase::Teleop,
             match_time: 100.0,
             vision_pose: None,
+            mech_angle: None,
         }
     }
 
