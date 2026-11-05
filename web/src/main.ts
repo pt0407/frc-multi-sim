@@ -119,11 +119,11 @@ async function tryLoadFieldGlb(url: string): Promise<boolean> {
       if (/fuel/i.test(m.name)) m.setEnabled(false);
     }
     console.log(`field GLB loaded: ${res.meshes.length} meshes`);
-    hud.textContent = `GLB field loaded (${res.meshes.length} meshes)`;
+    document.title = "GLB field";
     return true;
   } catch (e) {
     console.warn(`field GLB ${url} failed, using primitives:`, e);
-    hud.textContent = `GLB load FAILED: ${e}`;
+    document.title = "GLB FAILED " + e;
     return false;
   }
 }
@@ -147,7 +147,7 @@ async function buildField() {
 
 async function buildPrimitives() {
   if (!fieldCfg) return;
-  hud.textContent = "fallback: primitive field";
+  document.title = "PRIMITIVE fallback";
   const { half_x, half_z, wall_height, wall_thick } = fieldCfg;
 
   const ground = MeshBuilder.CreateGround("ground", { width: half_x * 2, height: half_z * 2 }, scene);
