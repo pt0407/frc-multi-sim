@@ -47,6 +47,12 @@ pub fn config_msg(field: &FieldSpec, specs: &[RobotSpec]) -> String {
         .iter()
         .map(|w| w.half_extents[1] * 2.0)
         .fold(0.0f32, f32::max);
+    // issue #42: spec paths like "assets/fields/x.glb" are served by vite's
+    // publicDir ('../assets'), so the URL drops the leading "assets/".
+    let glb_url = field.glb.as_ref().map(|p| {
+        let rel = p.strip_prefix("assets/").unwrap_or(p);
+        format!("/{rel}")
+    });
     json!({
         "type": "config",
         "field": {
@@ -61,7 +67,7 @@ pub fn config_msg(field: &FieldSpec, specs: &[RobotSpec]) -> String {
             "climb_points": field.climb_points,
             // optional GLB visual model (issue #42); null when the spec
             // doesn't reference one — clients keep primitive geometry
-            "glb_url": field.glb_url,
+            "glb_url": glb_url.or(field.glb_url.clone()),
         },
         // legacy single-robot dims (pre-#43 clients)
         "robot": { "half_extents": 0.4 },

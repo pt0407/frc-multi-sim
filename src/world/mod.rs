@@ -141,7 +141,67 @@ impl World {
             mechs: Vec::new(),
         };
 
-        field::build_arena(&w.field, &mut w.bodies, &mut w.colliders);
+        // issue #42: a GLB field mesh CAN replace the placeholder
+        // `obstacles` with trimesh colliders, but it's opt-in
+        // (`glb_colliders`) — 1.8 M tris is ~50 Hz in release. Walls +
+        // ground always stay (fieldcore does the same). GLB load failure
+        // warns and falls back to primitives.
+        let mut arena_spec = w.field.clone();
+        let want_glb = w
+            .field
+            .glb_colliders
+            .unwrap_or(false)
+            .then(|| w.field.glb.clone())
+            .flatten();
+        let glb_meshes = want_glb.as_ref().and_then(|p| {
+            match crate::glb::load_field_meshes(std::path::Path::new(p)) {
+                Ok(m) => {
+                    let tris: usize = m.iter().map(|x| x.indices.len()).sum();
+                    println!(
+                        "field GLB {}: {} meshes, {} triangles",
+                        p,
+                        m.len(),
+                        tris
+                    );
+                    Some(m)
+                }
+                Err(e) => {
+                    eprintln!("warning: field GLB {p} failed to load ({e}); using primitive obstacles");
+                    None
+                }
+            }
+        });
+        if glb_meshes.is_some() {
+            arena_spec.obstacles.clear();
+        }
+        let arena_body = field::build_arena(&arena_spec, &mut w.bodies, &mut w.colliders);
+        if let Some(meshes) = glb_meshes {
+            // merge into ONE trimesh: 1000+ separate BVHs made startup take
+            // ~60 s; a single BVH over the same triangles builds far faster
+            // and broadphase has less to do.
+            let total_v: usize = meshes.iter().map(|m| m.positions.len()).sum();
+            let total_i: usize = meshes.iter().map(|m| m.indices.len()).sum();
+            let mut positions = Vec::with_capacity(total_v);
+            let mut indices = Vec::with_capacity(total_i);
+            for m in &meshes {
+                let base = positions.len() as u32;
+                positions.extend(m.positions.iter().map(|p| point![p[0], p[1], p[2]]));
+                indices.extend(
+                    m.indices
+                        .iter()
+                        .map(|t| [t[0] + base, t[1] + base, t[2] + base]),
+                );
+            }
+            w.colliders.insert_with_parent(
+                ColliderBuilder::trimesh(positions, indices)
+                    .friction(0.82)
+                    .restitution(0.08)
+                    .restitution_combine_rule(CoefficientCombineRule::Min)
+                    .build(),
+                arena_body,
+                &mut w.bodies,
+            );
+        }
         w.pieces = pieces::spawn_table(
             &mut w.bodies,
             &mut w.colliders,

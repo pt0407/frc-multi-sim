@@ -71,6 +71,11 @@ interface StateMsg {
     linvel: [number, number, number];
     contact_impulse: number;
   }[];
+  pieces?: [number, number, number][];
+  scores?: [number, number];
+  held?: number[];
+  match_state?: string;
+  match_time?: number;
 }
 type Msg = ConfigMsg | StateMsg;
 
@@ -96,6 +101,19 @@ let built = false;
 async function buildField() {
   if (!fieldCfg || built) return;
   built = true;
+  const glbUrl = fieldCfg.glb_url;
+  if (glbUrl) {
+    // primitives are the fallback if the GLB 404s/fails to parse
+    tryLoadFieldGlb(glbUrl).then((ok) => {
+      if (!ok) buildPrimitives();
+    });
+    return;
+  }
+  buildPrimitives();
+}
+
+function buildPrimitives() {
+  if (!fieldCfg) return;
   const { half_x, half_z, wall_height, wall_thick } = fieldCfg;
 
   const ground = MeshBuilder.CreateGround("ground", { width: half_x * 2, height: half_z * 2 }, scene);
@@ -261,7 +279,26 @@ function connect() {
       buildField();
       return;
     }
+    // game pieces (free ones only; held/scored are not in the list)
+    const plist = msg.pieces ?? [];
+    for (let i = 0; i < MAX_PIECES; i++) {
+      const m = pieces[i];
+      if (!m) break;
+      if (i < plist.length) {
+        m.setEnabled(true);
+        m.position.set(plist[i][0], plist[i][1] + 0.15, plist[i][2]);
+      } else {
+        m.setEnabled(false);
+      }
+    }
+
     let lines = [`tick ${msg.tick}`];
+    if (msg.match_state) {
+      lines.push(
+        `${msg.match_state} ${msg.match_time?.toFixed(1) ?? "?"}s` +
+          (msg.scores ? `  score ${msg.scores[0]}-${msg.scores[1]}` : ""),
+      );
+    }
     for (const r of msg.robots) {
       const m = robotMesh(r.id);
       const rc = robotCfgs.get(r.id);

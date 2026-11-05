@@ -12,6 +12,10 @@ half_z = 4.0345
 
 # Visual model rendered by web/ when present (fetch via `npm run fetch-assets`).
 glb_url = "/field-assets/rebuilt-2026.glb"
+# Optional local GLB used for physics trimesh colliders when
+# `glb_colliders` is true (validation option; expensive).
+glb = "assets/fields/rebuilt2026/field.glb"
+glb_colliders = false
 
 [ground]
 half_extents = [20.0, 0.1, 20.0]
@@ -49,10 +53,8 @@ half_extents = [0.05, 0.6, 4.0345]
 friction     = 0.82
 restitution  = 0.08
 
-# --- obstacles (GLB-derived bounding boxes) --------------------------------
+# --- obstacles (GLB-derived bounding boxes; fallback when glb colliders off)
 # Source: Field3d_2026FRCFieldV1 model.glb node AABBs (see web/ASSETS.md).
-# Each element appears once per alliance end (mirrored in x; towers/depots
-# also flip z).
 
 # HUB — GE-263xx assembly. Base plate 1.182 m square centered at x=±3.645,
 # front panel reaches x=±4.236, upper opening rim at y≈2.13.
