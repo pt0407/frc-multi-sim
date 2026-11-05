@@ -71,7 +71,8 @@ pub struct World {
 }
 
 impl World {
-    /// Default two-robot world (robots at x=-4, x=+4), unseeded (seed 0).
+    /// Default six-robot world (alliance rows at x=∓4, z=-2,0,+2 —
+    /// alliance = robot_id % 2), unseeded (seed 0).
     pub fn new() -> Self {
         Self::with_specs(&chassis::default_specs(), 0)
     }
@@ -159,6 +160,13 @@ impl World {
 
     pub fn num_robots(&self) -> usize {
         self.chassis.len()
+    }
+
+    /// Ground-truth translation of one chassis (unfiltered — bypasses the
+    /// sensor noise model).
+    pub fn position(&self, robot: usize) -> [f32; 3] {
+        let t = self.bodies[self.chassis[robot]].translation();
+        [t.x, t.y, t.z]
     }
 
     /// Apply per-robot actuator commands, then advance the physics one

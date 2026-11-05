@@ -5,8 +5,10 @@ controlled by an independent process** — real WPILib robot code (via its own N
 server), scripted agents, RL policies, or humans — sharing one authoritative
 Rapier physics world.
 
-Status: **M0 (proof of concept)** — two robots colliding/pushing in a shared
-Rapier world, each believing it's the only robot.
+Status: **M1** — the default lineup is **6 robots in two alliance rows of 3**
+(even robot ids on -x, odd on +x; alliance = `robot_id % 2`), each believing
+it's the only robot. `--archetype` overrides any slot; extra `--archetype`
+flags extend the lineup past 6 with the same row layout.
 
 See [../ARCHITECTURE.md](../ARCHITECTURE.md) for the full design.
 

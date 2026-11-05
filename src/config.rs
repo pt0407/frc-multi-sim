@@ -53,17 +53,16 @@ impl SimConfig {
     /// Resolve robot specs: default lineup overridden per-slot by any
     /// loaded archetype files.
     pub fn robot_specs(&self) -> Vec<RobotSpec> {
-        let mut specs = chassis::default_specs();
-        specs.resize(NUM_ROBOTS.max(self.archetypes.len()), *specs.first().unwrap());
+        // lineup defaults to NUM_ROBOTS (6, issue #11); extra --archetype
+        // slots extend it with the same alliance-row layout
+        let n = NUM_ROBOTS.max(self.archetypes.len());
+        let mut specs: Vec<RobotSpec> = (0..n).map(chassis::default_spec).collect();
         for (i, path) in self.archetypes.iter().enumerate() {
-            if i >= specs.len() {
-                break;
-            }
             match Archetype::load(path) {
                 Ok(a) => {
                     println!("robot {} archetype {:?} ({})", i, a.name, path.display());
-                    let x = specs[i].spawn[0];
-                    specs[i] = RobotSpec::from_archetype(&a, x);
+                    let xz = [specs[i].spawn[0], specs[i].spawn[2]];
+                    specs[i] = RobotSpec::from_archetype(&a, xz);
                 }
                 Err(e) => eprintln!("failed to load archetype {}: {e:#}", path.display()),
             }

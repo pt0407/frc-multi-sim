@@ -102,7 +102,7 @@ fn log_roundtrips_and_replays_identically() {
     let (h, loaded) = replay::read_log(&path).unwrap();
     assert_eq!(h.seed, SEED);
     assert_eq!(h.protocol_version, PROTOCOL_VERSION);
-    assert_eq!(h.specs.len(), 2);
+    assert_eq!(h.specs.len(), chassis::NUM_ROBOTS);
     assert_eq!(loaded.len(), records.len());
 
     // replay must reproduce the recorded states bitwise
