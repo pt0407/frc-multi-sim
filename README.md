@@ -18,6 +18,7 @@ See [../ARCHITECTURE.md](../ARCHITECTURE.md) for the full design.
 | `drive` | Standalone agent process (WebSocket protocol): joystick-style force commands via a P-controller. |
 | `robot_process` | Mock WPILib robot: hosts its own **NT4 server** on a port, publishes actuator topics, polls sensor topics — the same topology a real WPILib sim exposes. |
 | `nt_probe` | NT4 debug probe: subscribes to all topics and prints updates. |
+| `web/` | Babylon.js browser viz: connects to the spectator stream and renders the field, walls, and color-coded robots with an orbit camera. |
 
 `src/nt_server.rs` is a minimal spec-conformant NT4 server (WS + msgpack +
 announce/subscribe/publish), just enough for `nt_client`/`ntcore` clients.
@@ -37,6 +38,20 @@ cargo run --release --bin robot_process -- --port 5820 --target -4 0 --max-force
 ```
 
 Both robots drive toward each other; the weaker one gets pushed back to its wall.
+
+## Browser viz
+
+The server also exposes a read-only **spectator stream** on
+`ws://127.0.0.1:9771`: on connect it sends a `config` message (field + robot
+dimensions), then broadcasts `{type:"state", tick, robots:[...]}` JSON at ~30 Hz
+with every robot's pose, velocities, and contact impulse.
+
+```bash
+cargo run --bin server
+cd web && npm install && npm run dev   # open http://localhost:5173
+# in another shell, drive a robot and watch it move in the browser:
+cargo run --bin drive -- --robot-id 0 --target 4 0
+```
 
 ## Notes / known issues
 

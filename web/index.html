@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>FRC Multi-Sim Viz</title>
+    <style>
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #111; }
+      #renderCanvas { width: 100%; height: 100%; display: block; }
+      #hud {
+        position: fixed; top: 8px; left: 8px; color: #ddd;
+        font: 12px monospace; background: rgba(0,0,0,0.5);
+        padding: 8px 10px; border-radius: 4px; white-space: pre;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="renderCanvas"></canvas>
+    <div id="hud">connecting…</div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
