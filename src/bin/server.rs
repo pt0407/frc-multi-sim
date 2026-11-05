@@ -10,6 +10,8 @@ use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
 use tokio_tungstenite::tungstenite::Message;
 
+mod viz;
+
 const PHYSICS_HZ: f32 = 400.0;
 const AGENT_EVERY: u32 = 8; // 50 Hz agent tick
 const NUM_ROBOTS: usize = 2;
@@ -242,6 +244,9 @@ async fn main() -> Result<()> {
     let commands: Commands = Arc::new(Mutex::new([None, None]));
     let (sensor_tx, _) = tokio::sync::broadcast::channel::<(usize, SensorFrame)>(256);
     let (done_tx, mut done_rx) = mpsc::channel::<usize>(8);
+
+    // spectator world-state stream for the web viz (port 9771)
+    tokio::spawn(viz::run(sensor_tx.clone()));
 
     for (robot_id, port) in args.nt.iter().enumerate() {
         if robot_id >= NUM_ROBOTS {
