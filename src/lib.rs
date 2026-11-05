@@ -1,3 +1,4 @@
+pub mod drivetrain;
 pub mod nt_server;
 pub mod sim;
 
@@ -29,6 +30,12 @@ pub struct ActuatorFrame {
     pub force: [f32; 2],
     /// desired yaw torque (N*m), + = counterclockwise from above
     pub torque: f32,
+    /// optional per-module commands for steerable drivetrains
+    /// (`drivetrain::ModuleCommand`). When `None`, the server's drivetrain
+    /// compatibility shim allocates `force`/`torque` across the modules, so
+    /// legacy agents keep working unchanged.
+    #[serde(default)]
+    pub modules: Option<Vec<drivetrain::ModuleCommand>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -50,7 +57,11 @@ mod tests {
     use super::*;
     #[test]
     fn actuator_roundtrip() {
-        let m = AgentMsg::Actuator(ActuatorFrame { force: [1.0, 2.0], torque: 0.5 });
+        let m = AgentMsg::Actuator(ActuatorFrame {
+            force: [1.0, 2.0],
+            torque: 0.5,
+            modules: None,
+        });
         let s = serde_json::to_string(&m).unwrap();
         eprintln!("{}", s);
         let back: AgentMsg = serde_json::from_str(&s).unwrap();
