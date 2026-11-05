@@ -22,6 +22,9 @@ struct Args {
     /// e.g. --archetype archetypes/fast-light.toml --archetype archetypes/heavy-pusher.toml
     #[arg(long)]
     archetype: Vec<std::path::PathBuf>,
+    /// Game-piece spawn/scoring table TOML (issue #3)
+    #[arg(long)]
+    pieces: Option<std::path::PathBuf>,
     /// Physics pacing mode
     #[arg(long, value_enum, default_value_t = TimeMode::Realtime)]
     time_mode: TimeMode,
@@ -100,6 +103,7 @@ async fn main() -> Result<()> {
         seed: args.seed,
         nt_ports: args.nt.clone(),
         archetypes: args.archetype.clone(),
+        pieces: args.pieces.clone(),
         record: args.record.clone(),
         replay: args.replay.clone(),
         diff: args.diff.clone(),
@@ -112,7 +116,8 @@ async fn main() -> Result<()> {
 
     let specs = cfg.robot_specs();
     let num_robots = specs.len();
-    let mut world = World::with_specs(&specs, cfg.seed);
+    let piece_table = cfg.piece_table();
+    let mut world = World::with_config(&specs, cfg.seed, &piece_table);
 
     // optional event log: header first, then per-tick records in the loop
     let mut log = match &cfg.record {
@@ -123,6 +128,7 @@ async fn main() -> Result<()> {
                 config_hash: cfg
                     .hash_archetype_files(SimConfig::config_hash(&specs)),
                 specs: specs.clone(),
+                pieces: Some(piece_table.clone()),
             };
             println!("recording event log -> {}", path.display());
             Some(LogWriter::create(path, &header)?)
@@ -132,9 +138,10 @@ async fn main() -> Result<()> {
 
     let commands = Arc::new(CommandSlots::new(num_robots));
     let (sensor_tx, _) = tokio::sync::broadcast::channel::<(usize, SensorFrame)>(256);
+    let (world_tx, _) = tokio::sync::broadcast::channel::<frc_sim_m0::viz::VizFrame>(64);
 
     // spectator world-state stream for the web viz (port 9771)
-    tokio::spawn(frc_sim_m0::viz::run(sensor_tx.clone()));
+    tokio::spawn(frc_sim_m0::viz::run(sensor_tx.clone(), world_tx.clone()));
 
     for (robot_id, port) in cfg.nt_ports.iter().enumerate() {
         if robot_id >= num_robots {
@@ -219,6 +226,14 @@ async fn main() -> Result<()> {
                         }
                         let _ = sensor_tx.send((r, frame));
                     }
+                    // spectator piece/score stream (~50 Hz source; the viz
+                    // republishes at 30 Hz)
+                    let _ = world_tx.send(frc_sim_m0::viz::VizFrame {
+                        tick,
+                        pieces: world.piece_positions(),
+                        scores: world.scores,
+                        held: world.held.clone(),
+                    });
                     // periodic flush so a killed server loses at most ~1 s
                     if tick % PHYSICS_HZ as u64 == 0 {
                         if let Some(w) = log.as_mut() {

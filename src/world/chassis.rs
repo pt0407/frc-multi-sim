@@ -3,7 +3,7 @@
 //! `RobotSpec` is the spawn-time physical description of one robot — what an
 //! archetype config resolves to. Spawn pose is stored per-spec so replay
 //! headers can carry the exact initial conditions.
-use crate::archetype::Archetype;
+use crate::archetype::{Archetype, IntakeSpec};
 use rapier3d::prelude::*;
 
 pub const ROBOT_HALF: f32 = 0.4; // ~0.8m square chassis
@@ -18,6 +18,8 @@ pub struct RobotSpec {
     pub half_extents: [f32; 3],
     /// spawn translation [x, y, z]
     pub spawn: [f32; 3],
+    /// robot-relative intake capture region (issue #3); `None` = no intake
+    pub intake: Option<IntakeSpec>,
 }
 
 impl RobotSpec {
@@ -27,6 +29,7 @@ impl RobotSpec {
             mass: ROBOT_MASS,
             half_extents: [ROBOT_HALF; 3],
             spawn: [x, ROBOT_HALF + 0.05, 0.0],
+            intake: None,
         }
     }
 
@@ -36,6 +39,7 @@ impl RobotSpec {
             mass: a.mass,
             half_extents: a.half_extents,
             spawn: [x, a.half_extents[1] + 0.05, 0.0],
+            intake: a.intake,
         }
     }
 }

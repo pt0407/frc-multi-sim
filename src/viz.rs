@@ -17,6 +17,19 @@ use tokio_tungstenite::tungstenite::Message;
 const VIZ_PORT: u16 = 9771;
 const VIZ_HZ: f32 = 30.0;
 
+/// Non-agent world state for spectators (issue #3): all live piece poses +
+/// per-alliance scores, published from the physics loop.
+#[derive(Debug, Clone)]
+pub struct VizFrame {
+    pub tick: u64,
+    /// world positions of free (not captured/scored) pieces
+    pub pieces: Vec<[f32; 3]>,
+    /// per-alliance score
+    pub scores: [u32; 2],
+    /// per-robot held inventory
+    pub held: Vec<u32>,
+}
+
 /// Field geometry mirrors the constants in server.rs so the client can lay
 /// out the floor/walls before the first state packet arrives.
 fn config_msg() -> String {
@@ -32,10 +45,18 @@ fn config_msg() -> String {
 /// republishes a combined world-state JSON blob at VIZ_HZ.
 async fn state_collector(
     sensor_tx: broadcast::Sender<(usize, SensorFrame)>,
+    world_tx: broadcast::Sender<VizFrame>,
     viz_tx: broadcast::Sender<String>,
 ) {
     let mut rx = sensor_tx.subscribe();
+    let mut wrx = world_tx.subscribe();
     let mut latest: BTreeMap<usize, SensorFrame> = BTreeMap::new();
+    let mut world_state = VizFrame {
+        tick: 0,
+        pieces: Vec::new(),
+        scores: [0; 2],
+        held: Vec::new(),
+    };
     let mut iv = interval(Duration::from_secs_f32(1.0 / VIZ_HZ));
     loop {
         tokio::select! {
@@ -44,6 +65,13 @@ async fn state_collector(
                     Ok((id, frame)) => { latest.insert(id, frame); }
                     Err(broadcast::error::RecvError::Lagged(_)) => continue,
                     Err(_) => break,
+                }
+            }
+            recv = wrx.recv() => {
+                match recv {
+                    Ok(f) => { world_state = f; }
+                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(_) => {}
                 }
             }
             _ = iv.tick() => {
@@ -64,7 +92,15 @@ async fn state_collector(
                         })
                     })
                     .collect();
-                let msg = json!({ "type": "state", "tick": tick, "robots": robots }).to_string();
+                let msg = json!({
+                    "type": "state",
+                    "tick": tick,
+                    "robots": robots,
+                    "pieces": world_state.pieces,
+                    "scores": world_state.scores,
+                    "held": world_state.held,
+                })
+                .to_string();
                 // ok if no spectators connected
                 let _ = viz_tx.send(msg);
             }
@@ -74,12 +110,15 @@ async fn state_collector(
 
 /// Runs forever: binds the spectator socket and fans world state out to all
 /// connected clients. Spawn once from main.
-pub async fn run(sensor_tx: broadcast::Sender<(usize, SensorFrame)>) -> Result<()> {
+pub async fn run(
+    sensor_tx: broadcast::Sender<(usize, SensorFrame)>,
+    world_tx: broadcast::Sender<VizFrame>,
+) -> Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", VIZ_PORT)).await?;
     println!("spectator stream listening on ws://127.0.0.1:{VIZ_PORT}");
 
     let (viz_tx, _) = broadcast::channel::<String>(64);
-    tokio::spawn(state_collector(sensor_tx, viz_tx.clone()));
+    tokio::spawn(state_collector(sensor_tx, world_tx, viz_tx.clone()));
 
     loop {
         let (stream, addr) = listener.accept().await?;

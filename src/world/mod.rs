@@ -4,9 +4,12 @@
 //! simulation deterministic and replayable (issue #5).
 pub mod chassis;
 pub mod field;
+pub mod pieces;
 
+pub use crate::archetype::IntakeSpec;
 pub use chassis::{RobotSpec, NUM_ROBOTS, ROBOT_HALF, ROBOT_MASS};
 pub use field::{FIELD_HALF_X, FIELD_HALF_Z};
+pub use pieces::{HubZone, PieceTable, SpawnZone};
 
 use crate::drivetrain::{rot2, yaw_from_quat, Drivetrain};
 use crate::rng::SimRng;
@@ -33,8 +36,19 @@ pub struct World {
     pub chassis_colliders: Vec<ColliderHandle>,
     drivetrains: Vec<Drivetrain>,
     /// Seeded RNG — the only legal source of randomness in world code
-    /// (PLAN §0). Currently unused; piece spawns / sensor noise draw here.
+    /// (PLAN §0). Piece spawns / sensor noise draw here.
     pub rng: SimRng,
+    /// live game-piece bodies (issue #3); scored/captured pieces are removed
+    pub pieces: Vec<RigidBodyHandle>,
+    /// per-robot held-piece inventory, fed by intake captures and consumed
+    /// by shots
+    pub held: Vec<u32>,
+    /// per-alliance score (alliance index = robot_id % 2)
+    pub scores: [u32; 2],
+    hubs: Vec<HubZone>,
+    intakes: Vec<Option<IntakeSpec>>,
+    /// sticky intake-run flag per robot, updated from actuator frames
+    intake_active: Vec<bool>,
 }
 
 impl World {
@@ -47,6 +61,11 @@ impl World {
     /// the world's `SimRng`; the same seed + same inputs always produce the
     /// same trajectory.
     pub fn with_specs(specs: &[RobotSpec], seed: u64) -> Self {
+        Self::with_config(specs, seed, &PieceTable::default())
+    }
+
+    /// Full constructor: robot specs + game-piece spawn/scoring table.
+    pub fn with_config(specs: &[RobotSpec], seed: u64, table: &PieceTable) -> Self {
         let mut w = World {
             pipeline: PhysicsPipeline::new(),
             gravity: vector![0.0, -9.81, 0.0],
@@ -73,9 +92,21 @@ impl World {
                 .map(|s| Drivetrain::swerve(s.mass, s.half_extents[0]))
                 .collect(),
             rng: SimRng::seeded(seed),
+            pieces: Vec::new(),
+            held: vec![0; specs.len()],
+            scores: [0; 2],
+            hubs: table.hubs.clone(),
+            intakes: specs.iter().map(|s| s.intake).collect(),
+            intake_active: vec![false; specs.len()],
         };
 
         field::build_arena(&mut w.bodies, &mut w.colliders);
+        w.pieces = pieces::spawn_table(
+            &mut w.bodies,
+            &mut w.colliders,
+            table,
+            &mut w.rng,
+        );
 
         for (i, spec) in specs.iter().enumerate() {
             let (body, col) =
@@ -102,11 +133,37 @@ impl World {
                 // per-wheel traction model: resolve the actuator command into
                 // module forces (grip-limited), then apply them off-center so
                 // yaw torque emerges from the force placement.
-                let (yaw, pos) = {
+                let (yaw, pos, lv) = {
                     let body = &self.bodies[*handle];
                     let r = body.rotation();
-                    (yaw_from_quat([r.i, r.j, r.k, r.w]), *body.translation())
+                    (
+                        yaw_from_quat([r.i, r.j, r.k, r.w]),
+                        *body.translation(),
+                        *body.linvel(),
+                    )
                 };
+                self.intake_active[i] = cmd.intake_active;
+                // shooter: consume a held piece and spawn a ballistic fuel
+                // (FuelSim launchFuel: hood angle, turret yaw, launch height,
+                // plus chassis velocity)
+                if let Some(shot) = cmd.shoot {
+                    if self.held[i] > 0 {
+                        self.held[i] -= 1;
+                        let aim = yaw + shot.turret_yaw;
+                        let hv = shot.launch_velocity * shot.hood_angle.cos();
+                        let vel = [
+                            hv * aim.cos() + lv.x,
+                            shot.launch_velocity * shot.hood_angle.sin(),
+                            hv * aim.sin() + lv.z,
+                        ];
+                        self.pieces.push(pieces::spawn_piece(
+                            &mut self.bodies,
+                            &mut self.colliders,
+                            [pos.x, pos.y + shot.launch_height, pos.z],
+                            vel,
+                        ));
+                    }
+                }
                 let resolved = self.drivetrains[i].resolve(cmd, yaw);
                 let body = &mut self.bodies[*handle];
                 body.reset_forces(true);
@@ -129,6 +186,8 @@ impl World {
                 body.reset_torques(true);
             }
         }
+        // quadratic air drag on free pieces (FuelSim DRAG_FORCE_FACTOR)
+        pieces::apply_drag(&mut self.bodies, &self.pieces);
         self.pipeline.step(
             &self.gravity,
             &self.integration,
@@ -144,6 +203,83 @@ impl World {
             &(),
             &(),
         );
+        self.update_game_pieces();
+    }
+
+    /// Post-step piece layer: intake captures (FuelSim registerIntake —
+    /// robot-relative AABB, piece is removed and counted as held) and hub
+    /// scoring (piece falls through a hub's entry plane -> alliance score).
+    fn update_game_pieces(&mut self) {
+        // robot poses for intake tests (only robots with an active intake)
+        let robots: Vec<Option<([f32; 3], f32)>> = (0..self.chassis.len())
+            .map(|i| {
+                if self.intake_active[i] && self.intakes[i].is_some() {
+                    let body = &self.bodies[self.chassis[i]];
+                    let t = body.translation();
+                    let r = body.rotation();
+                    Some((
+                        [t.x, t.y, t.z],
+                        yaw_from_quat([r.i, r.j, r.k, r.w]),
+                    ))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        let mut remove: Vec<usize> = Vec::new();
+        for (pi, h) in self.pieces.iter().enumerate() {
+            let body = &self.bodies[*h];
+            let t = body.translation();
+            let v = body.linvel();
+            let pos = [t.x, t.y, t.z];
+
+            // intake capture
+            let mut captured = false;
+            for (i, robot) in robots.iter().enumerate() {
+                if let Some((rpos, ryaw)) = robot {
+                    if pieces::intake_contains(
+                        &self.intakes[i].unwrap(),
+                        rpos,
+                        *ryaw,
+                        &pos,
+                    ) {
+                        self.held[i] += 1;
+                        remove.push(pi);
+                        captured = true;
+                        break;
+                    }
+                }
+            }
+            if captured {
+                continue;
+            }
+
+            // hub scoring: first matching hub wins
+            if let Some(hub) = self
+                .hubs
+                .iter()
+                .find(|hub| pieces::hub_scores(hub, &pos, &[v.x, v.y, v.z]))
+            {
+                let a = (hub.alliance as usize).min(self.scores.len() - 1);
+                self.scores[a] += 1;
+                remove.push(pi);
+            }
+        }
+
+        // remove captured/scored pieces (descending order keeps indices valid)
+        remove.sort_unstable_by(|a, b| b.cmp(a));
+        for pi in remove {
+            let h = self.pieces.swap_remove(pi);
+            self.bodies.remove(
+                h,
+                &mut self.islands,
+                &mut self.colliders,
+                &mut self.impulse_joints,
+                &mut self.multibody_joints,
+                true,
+            );
+        }
     }
 
     pub fn sensor_frame(&self, robot: usize, tick: u64) -> SensorFrame {
@@ -174,7 +310,21 @@ impl World {
             linvel: [lv.x, lv.y, lv.z],
             angvel: [av.x, av.y, av.z],
             contact_impulse,
+            pieces_held: self.held[robot],
+            score: self.scores[robot % self.scores.len()],
         }
+    }
+
+    /// World positions of all live (not captured/scored) pieces, for the
+    /// spectator state stream.
+    pub fn piece_positions(&self) -> Vec<[f32; 3]> {
+        self.pieces
+            .iter()
+            .map(|h| {
+                let t = self.bodies[*h].translation();
+                [t.x, t.y, t.z]
+            })
+            .collect()
     }
 }
 

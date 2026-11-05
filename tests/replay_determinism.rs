@@ -22,6 +22,8 @@ fn scripted_cmd(tick: u64, robot: usize) -> Option<ActuatorFrame> {
         force,
         torque: 0.0,
         modules: None,
+        intake_active: false,
+        shoot: None,
     })
 }
 
@@ -67,6 +69,7 @@ fn header() -> LogHeader {
         seed: SEED,
         config_hash: frc_sim_m0::config::SimConfig::config_hash(&chassis::default_specs()),
         specs: chassis::default_specs(),
+        pieces: None,
     }
 }
 

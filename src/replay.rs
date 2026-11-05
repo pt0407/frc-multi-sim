@@ -5,17 +5,25 @@
 //! ```text
 //! header:
 //!   magic            "FMSL"                       [4]u8
-//!   format_version   u32                          currently 1
+//!   format_version   u32                          2 (v1 logs still read)
 //!   protocol_version u32
 //!   seed             u64
 //!   config_hash      u64
 //!   num_robots       u32
-//!   per robot: mass f32, half_extents [3]f32, spawn [3]f32
+//!   per robot: mass f32, half_extents [3]f32, spawn [3]f32,
+//!              [v2] has_intake u8, if set: x_min x_max z_min z_max y_min
+//!              y_max f32
+//!   [v2] has_pieces u8, if set: piece table (n_zones u32, per zone:
+//!        center [2]f32 half_extents [2]f32 count u32; n_hubs u32, per hub:
+//!        center [2]f32 radius f32 entry_height f32 alliance u32)
 //! records (until EOF):
 //!   kind u8 = 1 (command):
 //!     tick u64, robot u32, has_cmd u8,
 //!     if has_cmd: force [2]f32, torque f32, n_modules u32,
 //!                 per module: steer f32, force f32
+//!                 [v2] intake_active u8, has_shoot u8,
+//!                      if has_shoot: launch_velocity, hood_angle,
+//!                      turret_yaw, launch_height f32
 //!   kind u8 = 2 (state sample, one per robot per agent tick):
 //!     tick u64, robot u32, position [3]f32, rotation [4]f32,
 //!     linvel [3]f32, angvel [3]f32
@@ -24,6 +32,9 @@
 //! The log is self-contained: the spec table lets `--replay` rebuild the
 //! exact world, and the embedded state samples let `--diff` detect
 //! divergence without a second log file.
+use crate::archetype::IntakeSpec;
+use crate::protocol::ShotCommand;
+use crate::world::pieces::{HubZone, PieceTable, SpawnZone};
 use crate::world::{RobotSpec, World, AGENT_EVERY};
 use crate::{ActuatorFrame, SensorFrame};
 use anyhow::{bail, Context, Result};
@@ -31,7 +42,7 @@ use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 
 const MAGIC: &[u8; 4] = b"FMSL";
-const FORMAT_VERSION: u32 = 1;
+const FORMAT_VERSION: u32 = 2;
 const KIND_CMD: u8 = 1;
 const KIND_STATE: u8 = 2;
 
@@ -41,6 +52,8 @@ pub struct LogHeader {
     pub seed: u64,
     pub config_hash: u64,
     pub specs: Vec<RobotSpec>,
+    /// game-piece spawn/scoring table (v2 headers; None for v1 logs)
+    pub pieces: Option<PieceTable>,
 }
 
 #[derive(Debug, Clone)]
@@ -113,6 +126,41 @@ impl LogWriter {
             for v in s.spawn {
                 w.write_all(&v.to_le_bytes())?;
             }
+            match &s.intake {
+                Some(i) => {
+                    w.write_all(&[1])?;
+                    for v in [i.x_min, i.x_max, i.z_min, i.z_max, i.y_min, i.y_max] {
+                        w.write_all(&v.to_le_bytes())?;
+                    }
+                }
+                None => w.write_all(&[0])?,
+            }
+        }
+        // v2: game-piece table
+        match &header.pieces {
+            Some(t) => {
+                w.write_all(&[1])?;
+                w.write_all(&(t.zones.len() as u32).to_le_bytes())?;
+                for z in &t.zones {
+                    for v in z.center {
+                        w.write_all(&v.to_le_bytes())?;
+                    }
+                    for v in z.half_extents {
+                        w.write_all(&v.to_le_bytes())?;
+                    }
+                    w.write_all(&z.count.to_le_bytes())?;
+                }
+                w.write_all(&(t.hubs.len() as u32).to_le_bytes())?;
+                for h in &t.hubs {
+                    for v in h.center {
+                        w.write_all(&v.to_le_bytes())?;
+                    }
+                    w.write_all(&h.radius.to_le_bytes())?;
+                    w.write_all(&h.entry_height.to_le_bytes())?;
+                    w.write_all(&h.alliance.to_le_bytes())?;
+                }
+            }
+            None => w.write_all(&[0])?,
         }
         Ok(LogWriter { w })
     }
@@ -155,6 +203,22 @@ impl LogWriter {
         for m in mods {
             self.w.write_all(&m.steer.to_le_bytes())?;
             self.w.write_all(&m.force.to_le_bytes())?;
+        }
+        // v2: intake flag + optional shot command
+        self.w.write_all(&[c.intake_active as u8])?;
+        match &c.shoot {
+            Some(s) => {
+                self.w.write_all(&[1])?;
+                for v in [
+                    s.launch_velocity,
+                    s.hood_angle,
+                    s.turret_yaw,
+                    s.launch_height,
+                ] {
+                    self.w.write_all(&v.to_le_bytes())?;
+                }
+            }
+            None => self.w.write_all(&[0])?,
         }
         Ok(())
     }
@@ -212,8 +276,8 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
         bail!("{}: not an FMSL replay log", path.display());
     }
     let fmt = r_u32(&mut r)?;
-    if fmt != FORMAT_VERSION {
-        bail!("unsupported log format version {fmt} (expected {FORMAT_VERSION})");
+    if fmt != FORMAT_VERSION && fmt != 1 {
+        bail!("unsupported log format version {fmt} (expected 1 or {FORMAT_VERSION})");
     }
     let header = LogHeader {
         protocol_version: r_u32(&mut r)?,
@@ -223,13 +287,67 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
             let n = r_u32(&mut r)? as usize;
             (0..n)
                 .map(|_| {
+                    let mass = r_f32(&mut r)?;
+                    let half_extents = r_f32s(&mut r)?;
+                    let spawn = r_f32s(&mut r)?;
+                    let intake = if fmt >= 2 {
+                        let mut b = [0u8; 1];
+                        r.read_exact(&mut b)?;
+                        if b[0] == 1 {
+                            Some(IntakeSpec {
+                                x_min: r_f32(&mut r)?,
+                                x_max: r_f32(&mut r)?,
+                                z_min: r_f32(&mut r)?,
+                                z_max: r_f32(&mut r)?,
+                                y_min: r_f32(&mut r)?,
+                                y_max: r_f32(&mut r)?,
+                            })
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
                     Ok(RobotSpec {
-                        mass: r_f32(&mut r)?,
-                        half_extents: r_f32s(&mut r)?,
-                        spawn: r_f32s(&mut r)?,
+                        mass,
+                        half_extents,
+                        spawn,
+                        intake,
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
+        },
+        pieces: if fmt >= 2 {
+            let mut b = [0u8; 1];
+            r.read_exact(&mut b)?;
+            if b[0] == 1 {
+                let nz = r_u32(&mut r)? as usize;
+                let zones = (0..nz)
+                    .map(|_| {
+                        Ok(SpawnZone {
+                            center: r_f32s(&mut r)?,
+                            half_extents: r_f32s(&mut r)?,
+                            count: r_u32(&mut r)?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let nh = r_u32(&mut r)? as usize;
+                let hubs = (0..nh)
+                    .map(|_| {
+                        Ok(HubZone {
+                            center: r_f32s(&mut r)?,
+                            radius: r_f32(&mut r)?,
+                            entry_height: r_f32(&mut r)?,
+                            alliance: r_u32(&mut r)?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                Some(PieceTable { zones, hubs })
+            } else {
+                None
+            }
+        } else {
+            None
         },
     };
     let mut records = Vec::new();
@@ -241,7 +359,7 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
             Err(e) => return Err(e).context("reading record kind"),
         }
         let parsed = match kind[0] {
-            KIND_CMD => read_cmd_record(&mut r),
+            KIND_CMD => read_cmd_record(&mut r, fmt),
             KIND_STATE => read_state_record(&mut r),
             k => bail!("unknown record kind {k} in {}", path.display()),
         };
@@ -269,7 +387,7 @@ fn is_eof(e: &anyhow::Error) -> bool {
         .unwrap_or(false)
 }
 
-fn read_cmd_record(r: &mut impl Read) -> Result<Record> {
+fn read_cmd_record(r: &mut impl Read, fmt: u32) -> Result<Record> {
     let tick = r_u64(r)?;
     let robot = r_u32(r)?;
     let has = {
@@ -295,10 +413,32 @@ fn read_cmd_record(r: &mut impl Read) -> Result<Record> {
         } else {
             None
         };
+        // v2: intake flag + optional shot command
+        let (intake_active, shoot) = if fmt >= 2 {
+            let mut b = [0u8; 1];
+            r.read_exact(&mut b)?;
+            let intake = b[0] == 1;
+            r.read_exact(&mut b)?;
+            let shoot = if b[0] == 1 {
+                Some(ShotCommand {
+                    launch_velocity: r_f32(r)?,
+                    hood_angle: r_f32(r)?,
+                    turret_yaw: r_f32(r)?,
+                    launch_height: r_f32(r)?,
+                })
+            } else {
+                None
+            };
+            (intake, shoot)
+        } else {
+            (false, None)
+        };
         Some(ActuatorFrame {
             force,
             torque,
             modules,
+            intake_active,
+            shoot,
         })
     } else {
         None
@@ -325,7 +465,12 @@ fn read_state_record(r: &mut impl Read) -> Result<Record> {
 /// seed, replay command events at their ticks, and return the resulting
 /// state samples (one per robot per agent tick, same cadence as `record`).
 pub fn replay(header: &LogHeader, records: &[Record]) -> Vec<(u64, u32, StateSample)> {
-    let mut world = World::with_specs(&header.specs, header.seed);
+    let empty = PieceTable::default();
+    let mut world = World::with_config(
+        &header.specs,
+        header.seed,
+        header.pieces.as_ref().unwrap_or(&empty),
+    );
     let n = world.num_robots();
     let mut cmds: Vec<Option<ActuatorFrame>> = vec![None; n];
     let cmd_events: Vec<&Record> = records

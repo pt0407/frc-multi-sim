@@ -23,11 +23,33 @@ pub struct SensorFrame {
     pub angvel: [f32; 3],
     /// contact-normal force magnitudes felt this tick (bumper hits)
     pub contact_impulse: f32,
+    /// game pieces currently held by this robot (issue #3)
+    #[serde(default)]
+    pub pieces_held: u32,
+    /// this robot's alliance score (pieces scored into its hub, issue #3)
+    #[serde(default)]
+    pub score: u32,
 }
 
 /// What an agent sends back. In a real adapter these are per-wheel/module
 /// voltages; for M0 we use chassis-level desired forces, which is equivalent
 /// to a holonomic drivetrain's net force request.
+/// Parameterized ballistic shot request (issue #3, FuelSim `launchFuel`
+/// port). Fires one held piece: launch speed along (turret_yaw + chassis
+/// yaw) at `hood_angle` above horizontal, from `launch_height` above the
+/// chassis center, plus the chassis's current velocity.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct ShotCommand {
+    /// flywheel exit speed, m/s
+    pub launch_velocity: f32,
+    /// hood angle, radians (0 = horizontal, pi/2 = straight up)
+    pub hood_angle: f32,
+    /// robot-relative turret yaw, radians
+    pub turret_yaw: f32,
+    /// launch height above chassis center, m
+    pub launch_height: f32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ActuatorFrame {
     /// desired force in world frame [x, z] (newtons)
@@ -40,6 +62,14 @@ pub struct ActuatorFrame {
     /// legacy agents keep working unchanged.
     #[serde(default)]
     pub modules: Option<Vec<crate::drivetrain::ModuleCommand>>,
+    /// run the intake this tick: pieces entering the archetype's intake
+    /// region are captured (issue #3). Defaults false so legacy agents
+    /// don't intake unintentionally.
+    #[serde(default)]
+    pub intake_active: bool,
+    /// optional one-shot ballistic launch; consumes one held piece (issue #3)
+    #[serde(default)]
+    pub shoot: Option<ShotCommand>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -79,6 +109,13 @@ mod tests {
             force: [1.0, 2.0],
             torque: 0.5,
             modules: None,
+            intake_active: true,
+            shoot: Some(ShotCommand {
+                launch_velocity: 10.0,
+                hood_angle: 0.7,
+                turret_yaw: 0.0,
+                launch_height: 0.5,
+            }),
         });
         let s = serde_json::to_string(&m).unwrap();
         eprintln!("{}", s);

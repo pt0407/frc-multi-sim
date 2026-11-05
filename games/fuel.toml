@@ -1,0 +1,36 @@
+# Game-piece table (issue #3): fuel spawn zones + hub scoring zones.
+# Load with: cargo run --bin server -- --pieces games/fuel.toml
+#
+# [[zone]]  — rectangular spawn area on the floor (x/z), pieces at rest
+# [[hub]]   — cylinder; a piece falling through entry_height inside
+#             radius scores for `alliance` (robot_id % 2)
+
+# midfield depot
+[[zone]]
+center = [0.0, 0.0]
+half_extents = [2.5, 1.5]
+count = 120
+
+# side stashes
+[[zone]]
+center = [-6.0, 2.5]
+half_extents = [0.8, 0.8]
+count = 40
+
+[[zone]]
+center = [6.0, -2.5]
+half_extents = [0.8, 0.8]
+count = 40
+
+# alliance 0 hub on the -x side, alliance 1 hub on +x
+[[hub]]
+center = [-7.0, 0.0]
+radius = 0.6
+entry_height = 1.0
+alliance = 0
+
+[[hub]]
+center = [7.0, 0.0]
+radius = 0.6
+entry_height = 1.0
+alliance = 1

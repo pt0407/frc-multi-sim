@@ -96,6 +96,8 @@ async fn main() -> Result<()> {
                 force: [fx, fz],
                 torque: 0.0,
                 modules: None,
+                intake_active: false,
+                shoot: None,
             }))
             .unwrap()
             .into(),

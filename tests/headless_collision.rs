@@ -26,11 +26,15 @@ fn two_robots_collide_and_match_golden() {
             force: [PUSH_FORCE, 0.0],
             torque: 0.0,
             modules: None,
+            intake_active: false,
+            shoot: None,
         }),
         Some(ActuatorFrame {
             force: [-PUSH_FORCE, 0.0],
             torque: 0.0,
             modules: None,
+            intake_active: false,
+            shoot: None,
         }),
     ];
 
