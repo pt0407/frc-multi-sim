@@ -298,6 +298,7 @@ fn replay_log_roundtrip_with_pieces() {
             config_hash: 0,
             specs: specs.clone(),
             pieces: Some(t.clone()),
+            match_cfg: None,
         };
         let mut lw = LogWriter::create(&path, &header).unwrap();
         for r in &records {

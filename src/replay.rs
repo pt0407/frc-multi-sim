@@ -256,6 +256,14 @@ impl LogWriter {
             }
             None => self.w.write_all(&[0])?,
         }
+        // v4: optional mechanism joint target (issue #57)
+        match &c.mech {
+            Some(m) => {
+                self.w.write_all(&[1])?;
+                self.w.write_all(&m.target.to_le_bytes())?;
+            }
+            None => self.w.write_all(&[0])?,
+        }
         Ok(())
     }
 
@@ -526,15 +534,25 @@ fn read_cmd_record(r: &mut impl Read, fmt: u32) -> Result<Record> {
         } else {
             (false, None)
         };
+        // v4: mechanism joint target (issue #57)
+        let mech = if fmt >= 4 {
+            let mut b = [0u8; 1];
+            r.read_exact(&mut b)?;
+            if b[0] == 1 {
+                Some(crate::MechCommand { target: r_f32(r)? })
+            } else {
+                None
+            }
+        } else {
+            None
+        };
         Some(ActuatorFrame {
             force,
             torque,
             modules,
             intake_active,
             shoot,
-            // mech commands are not yet in the replay record format
-            // (issue #57 spike follow-up); replays hold the last target
-            mech: None,
+            mech,
         })
     } else {
         None
