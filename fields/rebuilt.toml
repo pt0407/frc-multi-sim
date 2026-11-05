@@ -1,0 +1,97 @@
+# Field layout for the simulator (issue #14, PLAN C1).
+# 2026 REBUILT-flavored default: same playable area as the historical
+# hard-coded arena, plus placeholder obstacles / scoring zones / climb
+# points to exercise the config schema. All colliders are primitives;
+# GLB meshes replace these later via the same entries.
+
+name = "rebuilt-2026"
+half_x = 8.25   # meters; playable area 16.5 x 8.0
+half_z = 4.0
+
+[ground]
+half_extents = [20.0, 0.1, 20.0]
+pos          = [0.0, -0.1, 0.0]
+friction     = 1.0
+restitution  = 0.0
+
+# --- perimeter walls -------------------------------------------------------
+
+[[walls]]
+name         = "south"
+pos          = [0.0, 0.3, -4.0]
+half_extents = [8.25, 0.6, 0.05]
+friction     = 0.6
+
+[[walls]]
+name         = "north"
+pos          = [0.0, 0.3, 4.0]
+half_extents = [8.25, 0.6, 0.05]
+friction     = 0.6
+
+[[walls]]
+name         = "west"
+pos          = [-8.25, 0.3, 0.0]
+half_extents = [0.05, 0.6, 4.0]
+friction     = 0.6
+
+[[walls]]
+name         = "east"
+pos          = [8.25, 0.3, 0.0]
+half_extents = [0.05, 0.6, 4.0]
+friction     = 0.6
+
+# --- obstacles -----------------------------------------------------------
+# REBUILT-flavored structures near the field edges (midfield kept clear so
+# the stock two-robot collision scenario is unaffected).
+
+[[obstacles]]
+kind         = "box"
+name         = "hub-west"
+pos          = [-6.8, 0.5, 0.0]
+half_extents = [0.6, 0.5, 0.6]
+friction     = 0.7
+restitution  = 0.1
+
+[[obstacles]]
+kind         = "box"
+name         = "hub-east"
+pos          = [6.8, 0.5, 0.0]
+half_extents = [0.6, 0.5, 0.6]
+friction     = 0.7
+restitution  = 0.1
+
+[[obstacles]]
+kind         = "cylinder"
+name         = "tower-south"
+pos          = [0.0, 0.75, -3.2]
+radius       = 0.4
+half_height  = 0.75
+friction     = 0.5
+
+[[obstacles]]
+kind         = "cylinder"
+name         = "tower-north"
+pos          = [0.0, 0.75, 3.2]
+radius       = 0.4
+half_height  = 0.75
+friction     = 0.5
+
+# --- placeholders (no colliders; emitted to viz + hashed into replays) ----
+
+[[scoring_zones]]
+name = "alliance-west"
+min  = [-8.25, -4.0]
+max  = [-6.0, 4.0]
+
+[[scoring_zones]]
+name = "alliance-east"
+min  = [6.0, -4.0]
+max  = [8.25, 4.0]
+
+[[climb_points]]
+name = "tower-south-top"
+pos  = [0.0, 1.5, -3.2]
+
+[[climb_points]]
+name = "tower-north-top"
+pos  = [0.0, 1.5, 3.2]

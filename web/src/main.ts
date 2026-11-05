@@ -14,9 +14,23 @@ import {
 
 const WS_URL = `ws://${location.hostname}:9771`;
 
+interface WallSpec {
+  pos: [number, number, number];
+  half_extents: [number, number, number];
+}
+type ObstacleSpec =
+  | { kind: "box"; pos: [number, number, number]; half_extents: [number, number, number] }
+  | { kind: "cylinder"; pos: [number, number, number]; radius: number; half_height: number };
 interface ConfigMsg {
   type: "config";
-  field: { half_x: number; half_z: number; wall_height: number; wall_thick: number };
+  field: {
+    half_x: number;
+    half_z: number;
+    wall_height: number;
+    wall_thick: number;
+    walls?: WallSpec[];
+    obstacles?: ObstacleSpec[];
+  };
   robot: { half_extents: number };
 }
 interface StateMsg {
@@ -61,16 +75,40 @@ function buildField() {
 
   const wm = new StandardMaterial("wm", scene);
   wm.diffuseColor = new Color3(0.6, 0.6, 0.65);
-  const walls: [number, number, number, number][] = [
-    [0, -half_z, half_x * 2, wall_thick],
-    [0, half_z, half_x * 2, wall_thick],
-    [-half_x, 0, wall_thick, half_z * 2],
-    [half_x, 0, wall_thick, half_z * 2],
-  ];
-  for (const [x, z, w, d] of walls) {
-    const wall = MeshBuilder.CreateBox("wall", { width: w, height: wall_height, depth: d }, scene);
-    wall.position = new Vector3(x, wall_height / 2, z);
-    wall.material = wm;
+  if (fieldCfg.walls?.length) {
+    // real wall segments from the field spec
+    for (const w of fieldCfg.walls) {
+      const [hx, hy, hz] = w.half_extents;
+      const wall = MeshBuilder.CreateBox("wall", { width: hx * 2, height: hy * 2, depth: hz * 2 }, scene);
+      wall.position = new Vector3(w.pos[0], w.pos[1], w.pos[2]);
+      wall.material = wm;
+    }
+  } else {
+    const walls: [number, number, number, number][] = [
+      [0, -half_z, half_x * 2, wall_thick],
+      [0, half_z, half_x * 2, wall_thick],
+      [-half_x, 0, wall_thick, half_z * 2],
+      [half_x, 0, wall_thick, half_z * 2],
+    ];
+    for (const [x, z, w, d] of walls) {
+      const wall = MeshBuilder.CreateBox("wall", { width: w, height: wall_height, depth: d }, scene);
+      wall.position = new Vector3(x, wall_height / 2, z);
+      wall.material = wm;
+    }
+  }
+
+  const om = new StandardMaterial("om", scene);
+  om.diffuseColor = new Color3(0.75, 0.5, 0.15);
+  for (const o of fieldCfg.obstacles ?? []) {
+    let mesh: Mesh;
+    if (o.kind === "cylinder") {
+      mesh = MeshBuilder.CreateCylinder("obstacle", { diameter: o.radius * 2, height: o.half_height * 2 }, scene);
+    } else {
+      const [hx, hy, hz] = o.half_extents;
+      mesh = MeshBuilder.CreateBox("obstacle", { width: hx * 2, height: hy * 2, depth: hz * 2 }, scene);
+    }
+    mesh.position = new Vector3(o.pos[0], o.pos[1], o.pos[2]);
+    mesh.material = om;
   }
 }
 

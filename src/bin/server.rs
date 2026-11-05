@@ -22,6 +22,10 @@ struct Args {
     /// e.g. --archetype archetypes/fast-light.toml --archetype archetypes/heavy-pusher.toml
     #[arg(long)]
     archetype: Vec<std::path::PathBuf>,
+    /// Field layout TOML (issue #14). Defaults to the shipped 2026
+    /// REBUILT-flavored layout; omit to use it, or pass another file.
+    #[arg(long)]
+    field: Option<std::path::PathBuf>,
     /// Physics pacing mode
     #[arg(long, value_enum, default_value_t = TimeMode::Realtime)]
     time_mode: TimeMode,
@@ -100,6 +104,10 @@ async fn main() -> Result<()> {
         seed: args.seed,
         nt_ports: args.nt.clone(),
         archetypes: args.archetype.clone(),
+        field: args.field.clone().or_else(|| {
+            let p = std::path::PathBuf::from("fields/rebuilt.toml");
+            p.exists().then_some(p)
+        }),
         record: args.record.clone(),
         replay: args.replay.clone(),
         diff: args.diff.clone(),
@@ -112,7 +120,16 @@ async fn main() -> Result<()> {
 
     let specs = cfg.robot_specs();
     let num_robots = specs.len();
-    let mut world = World::with_specs(&specs, cfg.seed);
+    let field = cfg.field_spec()?;
+    println!(
+        "field {:?}: {:.2} x {:.2} m, {} walls, {} obstacles",
+        field.name.as_deref().unwrap_or("unnamed"),
+        field.half_x * 2.0,
+        field.half_z * 2.0,
+        field.walls.len(),
+        field.obstacles.len()
+    );
+    let mut world = World::with_field(&specs, field.clone(), cfg.seed);
 
     // optional event log: header first, then per-tick records in the loop
     let mut log = match &cfg.record {
@@ -120,8 +137,10 @@ async fn main() -> Result<()> {
             let header = LogHeader {
                 protocol_version: PROTOCOL_VERSION,
                 seed: cfg.seed,
-                config_hash: cfg
-                    .hash_archetype_files(SimConfig::config_hash(&specs)),
+                config_hash: cfg.hash_field(
+                    cfg.hash_archetype_files(SimConfig::config_hash(&specs)),
+                    &field,
+                ),
                 specs: specs.clone(),
             };
             println!("recording event log -> {}", path.display());
@@ -134,7 +153,7 @@ async fn main() -> Result<()> {
     let (sensor_tx, _) = tokio::sync::broadcast::channel::<(usize, SensorFrame)>(256);
 
     // spectator world-state stream for the web viz (port 9771)
-    tokio::spawn(frc_sim_m0::viz::run(sensor_tx.clone()));
+    tokio::spawn(frc_sim_m0::viz::run(sensor_tx.clone(), field.clone()));
 
     for (robot_id, port) in cfg.nt_ports.iter().enumerate() {
         if robot_id >= num_robots {

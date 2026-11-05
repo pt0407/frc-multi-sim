@@ -3,6 +3,7 @@
 //! world is built from, and the config hash stored in replay headers.
 use crate::archetype::Archetype;
 use crate::world::chassis::{self, RobotSpec, NUM_ROBOTS};
+use crate::world::field::FieldSpec;
 use clap::ValueEnum;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
@@ -30,6 +31,8 @@ pub struct SimConfig {
     pub nt_ports: Vec<u16>,
     /// archetype TOML paths, indexed by robot id
     pub archetypes: Vec<PathBuf>,
+    /// field layout TOML (issue #14); `None` -> built-in default layout
+    pub field: Option<PathBuf>,
     /// write an event log here (record mode)
     pub record: Option<PathBuf>,
     /// re-run this log headless (replay mode)
@@ -62,6 +65,15 @@ impl SimConfig {
         specs
     }
 
+    /// Resolve the field layout: `--field` TOML if given, else the
+    /// historical default. Invalid files fail loudly (schema-checked).
+    pub fn field_spec(&self) -> anyhow::Result<FieldSpec> {
+        match &self.field {
+            Some(p) => FieldSpec::load(p),
+            None => Ok(FieldSpec::default()),
+        }
+    }
+
     /// Hash of everything that affects the trajectory besides inputs and
     /// seed: archetype file contents + resolved specs. Stored in replay
     /// headers so a log can't be silently replayed against a different
@@ -92,5 +104,20 @@ impl SimConfig {
         }
         h = hasher.finish();
         h
+    }
+
+    /// Fold the field spec into the config hash so replays pin the field
+    /// layout (issue #14). Hashes the resolved spec (not just file bytes)
+    /// so the default layout is pinned too.
+    pub fn hash_field(&self, h: u64, field: &FieldSpec) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        hasher.write_u64(h);
+        hasher.write(&serde_json::to_vec(field).unwrap_or_default());
+        if let Some(p) = &self.field {
+            if let Ok(bytes) = std::fs::read(p) {
+                hasher.write(&bytes);
+            }
+        }
+        hasher.finish()
     }
 }
