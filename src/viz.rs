@@ -67,7 +67,7 @@ pub fn config_msg(field: &FieldSpec, specs: &[RobotSpec]) -> String {
             "climb_points": field.climb_points,
             // optional GLB visual model (issue #42); null when the spec
             // doesn't reference one — clients keep primitive geometry
-            "glb_url": glb_url.or(field.glb_url.clone()),
+            "glb_url": field.glb_url.clone().or(glb_url),
         },
         // legacy single-robot dims (pre-#43 clients)
         "robot": { "half_extents": 0.4 },
