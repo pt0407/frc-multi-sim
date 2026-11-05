@@ -1,4 +1,5 @@
 pub mod nt_server;
+pub mod sim;
 
 use serde::{Deserialize, Serialize};
 
