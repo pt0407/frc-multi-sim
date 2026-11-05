@@ -43,6 +43,7 @@ async fn main() -> Result<()> {
         serde_json::to_string(&AgentMsg::Hello {
             name: format!("driver-{}", args.robot_id),
             robot_id: args.robot_id,
+            protocol_version: frc_sim_m0::PROTOCOL_VERSION,
         })
         .unwrap()
         .into(),

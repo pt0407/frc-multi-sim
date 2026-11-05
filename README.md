@@ -53,6 +53,24 @@ cd web && npm install && npm run dev   # open http://localhost:5173
 cargo run --bin drive -- --robot-id 0 --target 4 0
 ```
 
+## Determinism / replay
+
+The physics loop is step-count driven (issue #5). `--time-mode` selects
+pacing: `realtime` (400 Hz wall-clock, default), `lockstep` (agent tick
+barrier — waits for each connected WS agent's fresh command), `fast`
+(no sleeps, for RL).
+
+```bash
+# record inputs + state samples, then re-run them headless
+cargo run --release --bin server -- --seed 7 --record run.fmsl
+cargo run --release --bin server -- --replay run.fmsl --diff run.fmsl
+```
+
+Log files carry a header (seed, protocol version, per-robot specs, config
+hash) so a replay rebuilds the exact world. `--diff` exits non-zero with
+the first divergent tick + magnitude. Agents must send
+`protocol_version` in `Hello` (currently 1) or they're rejected.
+
 ## Notes / known issues
 
 - `nt_client` 0.5.1's `GenericPublisher` latches the first announce carrying a

@@ -1,246 +1,17 @@
+//! Physics orchestrator binary — thin shell (PLAN A4). All logic lives in
+//! `frc_sim_m0::{world, agents, config, replay}`; this file wires the
+//! config, the deterministic step-count-driven physics loop, and the agent
+//! services together.
 use anyhow::Result;
 use clap::Parser;
-use futures_util::{SinkExt, StreamExt};
-use frc_sim_m0::drivetrain::{rot2, yaw_from_quat, Drivetrain};
-use frc_sim_m0::{ActuatorFrame, AgentMsg, SensorFrame, ServerMsg};
-use frc_sim_m0::nt_client_min::NtClient;
-use rapier3d::prelude::*;
-use std::sync::{Arc, Mutex};
+use frc_sim_m0::agents::{self, CommandSlots};
+use frc_sim_m0::config::{SimConfig, TimeMode};
+use frc_sim_m0::replay::{self, LogHeader, LogWriter, Record};
+use frc_sim_m0::world::{World, AGENT_EVERY, PHYSICS_HZ};
+use frc_sim_m0::{SensorFrame, PROTOCOL_VERSION};
+use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
-use tokio_tungstenite::tungstenite::Message;
-
-
-
-const PHYSICS_HZ: f32 = 400.0;
-const AGENT_EVERY: u32 = 8; // 50 Hz agent tick
-const NUM_ROBOTS: usize = 2;
-const ROBOT_HALF: f32 = 0.4; // ~0.8m square chassis
-const ROBOT_MASS: f32 = 60.0; // kg
-const FIELD_HALF_X: f32 = 8.25;
-const FIELD_HALF_Z: f32 = 4.0;
-
-struct World {
-    pipeline: PhysicsPipeline,
-    gravity: Vector<f32>,
-    integration: IntegrationParameters,
-    islands: IslandManager,
-    broad_phase: DefaultBroadPhase,
-    narrow_phase: NarrowPhase,
-    bodies: RigidBodySet,
-    colliders: ColliderSet,
-    impulse_joints: ImpulseJointSet,
-    multibody_joints: MultibodyJointSet,
-    ccd: CCDSolver,
-    query: QueryPipeline,
-    chassis: Vec<RigidBodyHandle>,
-    chassis_colliders: Vec<ColliderHandle>,
-    drivetrains: Vec<Drivetrain>,
-}
-
-impl World {
-    /// Arena only: pipeline + ground + walls, no robots yet.
-    fn arena() -> Self {
-        let mut w = World {
-            pipeline: PhysicsPipeline::new(),
-            gravity: vector![0.0, -9.81, 0.0],
-            integration: IntegrationParameters {
-                dt: 1.0 / PHYSICS_HZ,
-                ..Default::default()
-            },
-            islands: IslandManager::new(),
-            broad_phase: DefaultBroadPhase::new(),
-            narrow_phase: NarrowPhase::new(),
-            bodies: RigidBodySet::new(),
-            colliders: ColliderSet::new(),
-            impulse_joints: ImpulseJointSet::new(),
-            multibody_joints: MultibodyJointSet::new(),
-            ccd: CCDSolver::new(),
-            query: QueryPipeline::new(),
-            chassis: Vec::new(),
-            chassis_colliders: Vec::new(),
-            // default profile: 4-module swerve per robot (issue #2). The
-            // legacy `Drivetrain::simple` sliding box remains available as a
-            // fallback profile. Config-file selection is issue #8.
-            drivetrains: (0..NUM_ROBOTS)
-                .map(|_| Drivetrain::swerve(ROBOT_MASS, ROBOT_HALF))
-                .collect(),
-        };
-
-        // ground
-        let ground = w.bodies.insert(RigidBodyBuilder::fixed());
-        w.colliders.insert_with_parent(
-            ColliderBuilder::cuboid(20.0, 0.1, 20.0)
-                .translation(vector![0.0, -0.1, 0.0])
-                .friction(1.0)
-                .build(),
-            ground,
-            &mut w.bodies,
-        );
-        // field walls
-        for (x, z, hx, hz) in [
-            (0.0, -FIELD_HALF_Z, FIELD_HALF_X, 0.05),
-            (0.0, FIELD_HALF_Z, FIELD_HALF_X, 0.05),
-            (-FIELD_HALF_X, 0.0, 0.05, FIELD_HALF_Z),
-            (FIELD_HALF_X, 0.0, 0.05, FIELD_HALF_Z),
-        ] {
-            w.colliders.insert_with_parent(
-                ColliderBuilder::cuboid(hx, 0.6, hz)
-                    .translation(vector![x, 0.3, z])
-                    .friction(0.6)
-                    .build(),
-                ground,
-                &mut w.bodies,
-            );
-        }
-
-        w
-    }
-}
-
-/// Spawn-time physical params for one robot (archetype or default).
-#[derive(Clone, Copy)]
-pub struct RobotSpec {
-    pub mass: f32,
-    pub half_extents: [f32; 3],
-}
-
-impl Default for RobotSpec {
-    fn default() -> Self {
-        RobotSpec {
-            mass: ROBOT_MASS,
-            half_extents: [ROBOT_HALF; 3],
-        }
-    }
-}
-
-impl From<&frc_sim_m0::archetype::Archetype> for RobotSpec {
-    fn from(a: &frc_sim_m0::archetype::Archetype) -> Self {
-        RobotSpec {
-            mass: a.mass,
-            half_extents: a.half_extents,
-        }
-    }
-}
-
-impl World {
-    fn new() -> Self {
-        Self::with_specs(&[RobotSpec::default(); NUM_ROBOTS])
-    }
-
-    fn with_specs(specs: &[RobotSpec]) -> Self {
-        let mut w = Self::arena();
-        // chassis: robot 0 at (-4, 0), robot 1 at (4, 0)
-        for (i, x) in [-4.0f32, 4.0].iter().enumerate() {
-            let spec = &specs[i];
-            let [hx, hy, hz] = spec.half_extents;
-            let body = w.bodies.insert(
-                RigidBodyBuilder::dynamic()
-                    .translation(vector![*x, hy + 0.05, 0.0])
-                    .additional_mass(spec.mass)
-                    .linear_damping(1.0)
-                    .angular_damping(4.0)
-                    // lock X/Z rotation: chassis stays upright (2.5D drive, 3D contacts)
-                    .enabled_rotations(false, true, false)
-                    .ccd_enabled(true)
-                    .build(),
-            );
-            let col = w.colliders.insert_with_parent(
-                ColliderBuilder::cuboid(hx, hy, hz)
-                    .friction(0.9)
-                    .restitution(0.1)
-                    .density(1.0)
-                    .build(),
-                body,
-                &mut w.bodies,
-            );
-            w.chassis.push(body);
-            w.chassis_colliders.push(col);
-            println!(
-                "robot {} spawned at x={} mass={} half={:?}",
-                i, x, spec.mass, spec.half_extents
-            );
-        }
-        w
-    }
-
-    fn step(&mut self, commands: &[Option<ActuatorFrame>; NUM_ROBOTS]) {
-        for (i, handle) in self.chassis.iter().enumerate() {
-            if let Some(cmd) = &commands[i] {
-                // per-wheel traction model: resolve the actuator command into
-                // module forces (grip-limited), then apply them off-center so
-                // yaw torque emerges from the force placement.
-                let (yaw, pos) = {
-                    let body = &self.bodies[*handle];
-                    let r = body.rotation();
-                    (yaw_from_quat([r.i, r.j, r.k, r.w]), *body.translation())
-                };
-                let resolved = self.drivetrains[i].resolve(cmd, yaw);
-                let body = &mut self.bodies[*handle];
-                body.reset_forces(true);
-                body.reset_torques(true);
-                for f in &resolved {
-                    // apply at the wheel's ground contact point
-                    let p = rot2(f.local_point, yaw);
-                    body.add_force_at_point(
-                        vector![f.force[0], 0.0, f.force[1]],
-                        point![pos.x + p[0], 0.05, pos.z + p[1]],
-                        true,
-                    );
-                    if f.torque != 0.0 {
-                        body.add_torque(vector![0.0, f.torque, 0.0], true);
-                    }
-                }
-            } else {
-                let body = &mut self.bodies[*handle];
-                body.reset_forces(true);
-                body.reset_torques(true);
-            }
-        }
-        self.pipeline.step(
-            &self.gravity,
-            &self.integration,
-            &mut self.islands,
-            &mut self.broad_phase,
-            &mut self.narrow_phase,
-            &mut self.bodies,
-            &mut self.colliders,
-            &mut self.impulse_joints,
-            &mut self.multibody_joints,
-            &mut self.ccd,
-            Some(&mut self.query),
-            &(),
-            &(),
-        );
-    }
-
-    fn sensor_frame(&self, robot: usize, tick: u64) -> SensorFrame {
-        let body = &self.bodies[self.chassis[robot]];
-        let t = body.translation();
-        let r = body.rotation();
-        let lv = body.linvel();
-        let av = body.angvel();
-        // only robot-vs-robot contacts (filter out ground/walls)
-        let other = self.chassis_colliders[1 - robot];
-        let contact_impulse: f32 = self
-            .narrow_phase
-            .contact_pairs_with(self.chassis_colliders[robot])
-            .filter(|p| p.collider1 == other || p.collider2 == other)
-            .map(|p| p.manifolds.iter().map(|m| m.points.len()).sum::<usize>())
-            .sum::<usize>() as f32;
-        SensorFrame {
-            tick,
-            position: [t.x, t.y, t.z],
-            rotation: [r.i, r.j, r.k, r.w],
-            linvel: [lv.x, lv.y, lv.z],
-            angvel: [av.x, av.y, av.z],
-            contact_impulse,
-        }
-    }
-}
-
-type Commands = Arc<Mutex<[Option<ActuatorFrame>; NUM_ROBOTS]>>;
 
 #[derive(Parser)]
 struct Args {
@@ -251,88 +22,125 @@ struct Args {
     /// e.g. --archetype archetypes/fast-light.toml --archetype archetypes/heavy-pusher.toml
     #[arg(long)]
     archetype: Vec<std::path::PathBuf>,
+    /// Physics pacing mode
+    #[arg(long, value_enum, default_value_t = TimeMode::Realtime)]
+    time_mode: TimeMode,
+    /// Seed for the world's SimRng (recorded in replay logs)
+    #[arg(long, default_value_t = 0)]
+    seed: u64,
+    /// Record the run's inputs + state samples to this binary log
+    #[arg(long)]
+    record: Option<std::path::PathBuf>,
+    /// Re-run this log headless and exit (no sockets bound)
+    #[arg(long)]
+    replay: Option<std::path::PathBuf>,
+    /// Golden log to diff against (with --replay: compares its replayed
+    /// trajectory to this file's recorded states; alone: replays this file
+    /// and checks it reproduces its own recorded states)
+    #[arg(long)]
+    diff: Option<std::path::PathBuf>,
+    /// Divergence tolerance in meters (0 = bitwise)
+    #[arg(long, default_value_t = 0.0)]
+    diff_tol: f32,
 }
 
-/// NT4 bridge: orchestrator acts as an NT client to a robot's own NT server —
-/// the same topology as a real WPILib sim. Subscribes to actuator topics,
-/// publishes sensor topics. Uses our minimal client (`nt_client` 0.5.1's
-/// GenericPublisher has a pubuid-latching bug, see issue #1).
-async fn nt_bridge(
-    robot_id: usize,
-    port: u16,
-    commands: Commands,
-    sensor_tx: tokio::sync::broadcast::Sender<(usize, SensorFrame)>,
-) {
-    loop {
-        let Ok(client) = NtClient::connect(port).await else {
-            tokio::time::sleep(Duration::from_millis(500)).await;
-            continue;
-        };
-        println!("robot {} nt bridge connected -> :{}", robot_id, port);
-        for n in ["pose_x", "pose_z", "yaw", "vel_x", "vel_z", "contact"] {
-            client.publish(&format!("/sim/{n}"), 3);
-        }
-        // poll actuator topics into the command slot
-        {
-            let client = client.clone();
-            let commands = commands.clone();
-            tokio::spawn(async move {
-                loop {
-                    tokio::time::sleep(Duration::from_millis(5)).await;
-                    let fx = client.get_f64("/sim/cmd_fx").unwrap_or(0.0) as f32;
-                    let fz = client.get_f64("/sim/cmd_fz").unwrap_or(0.0) as f32;
-                    let tq = client.get_f64("/sim/cmd_torque").unwrap_or(0.0) as f32;
-                    commands.lock().unwrap()[robot_id] = Some(ActuatorFrame {
-                        force: [fx, fz],
-                        torque: tq,
-                        modules: None,
-                    });
-                }
-            });
-        }
-        let mut rx = sensor_tx.subscribe();
-        while let Ok((r, s)) = rx.recv().await {
-            if !client.alive() {
-                break;
-            }
-            if r != robot_id {
-                continue;
-            }
-            let [qx, qy, qz, qw] = s.rotation;
-            let yaw = 2.0 * (qw * qy + qx * qz).atan2(1.0 - 2.0 * (qy * qy + qx * qx));
-            let vals = [
-                s.position[0], s.position[2], yaw,
-                s.linvel[0], s.linvel[2], s.contact_impulse,
-            ];
-            for (i, n) in ["pose_x", "pose_z", "yaw", "vel_x", "vel_z", "contact"]
-                .iter()
-                .enumerate()
-            {
-                client.set_f64(&format!("/sim/{n}"), vals[i] as f64);
-            }
-        }
-        eprintln!("robot {} nt bridge dropped, reconnecting", robot_id);
+fn run_replay(cfg: &SimConfig) -> Result<()> {
+    // --diff without --replay is a self-check of the golden file
+    let log_path = cfg.replay.as_ref().or(cfg.diff.as_ref()).unwrap();
+    let (header, records) = replay::read_log(log_path)?;
+    println!(
+        "replaying {} (seed={}, protocol v{}, {} robots, {} records)",
+        log_path.display(),
+        header.seed,
+        header.protocol_version,
+        header.specs.len(),
+        records.len()
+    );
+    let states = replay::replay(&header, &records);
+    println!("replayed {} state samples", states.len());
+    for (tick, robot, s) in states.iter().rev().take(header.specs.len()) {
+        println!(
+            "  final tick {} robot {}: pos=({:.3},{:.3},{:.3})",
+            tick, robot, s.position[0], s.position[1], s.position[2]
+        );
     }
+
+    if let Some(golden_path) = &cfg.diff {
+        let (_, golden_records) = replay::read_log(golden_path)?;
+        let golden: Vec<(u64, u32, replay::StateSample)> = golden_records
+            .iter()
+            .filter_map(|r| match r {
+                Record::State {
+                    tick,
+                    robot,
+                    sample,
+                } => Some((*tick, *robot, sample.clone())),
+                _ => None,
+            })
+            .collect();
+        match replay::diff(&golden, &states, cfg.diff_tol) {
+            None => println!("DIFF OK: trajectory matches golden ({} samples)", golden.len()),
+            Some(d) => {
+                println!(
+                    "DIVERGENCE at tick {} robot {}: magnitude {:.6} (after {} samples)",
+                    d.tick, d.robot, d.magnitude, d.compared
+                );
+                std::process::exit(1);
+            }
+        }
+    }
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    let listener = TcpListener::bind("127.0.0.1:9770").await?;
-    println!("orchestrator listening on ws://127.0.0.1:9770/robot/<id>");
+    let cfg = SimConfig {
+        time_mode: args.time_mode,
+        seed: args.seed,
+        nt_ports: args.nt.clone(),
+        archetypes: args.archetype.clone(),
+        record: args.record.clone(),
+        replay: args.replay.clone(),
+        diff: args.diff.clone(),
+        diff_tol: args.diff_tol,
+    };
 
-    let commands: Commands = Arc::new(Mutex::new([None, None]));
+    if cfg.replay.is_some() || cfg.diff.is_some() {
+        return run_replay(&cfg);
+    }
+
+    let specs = cfg.robot_specs();
+    let num_robots = specs.len();
+    let mut world = World::with_specs(&specs, cfg.seed);
+
+    // optional event log: header first, then per-tick records in the loop
+    let mut log = match &cfg.record {
+        Some(path) => {
+            let header = LogHeader {
+                protocol_version: PROTOCOL_VERSION,
+                seed: cfg.seed,
+                config_hash: cfg
+                    .hash_archetype_files(SimConfig::config_hash(&specs)),
+                specs: specs.clone(),
+            };
+            println!("recording event log -> {}", path.display());
+            Some(LogWriter::create(path, &header)?)
+        }
+        None => None,
+    };
+
+    let commands = Arc::new(CommandSlots::new(num_robots));
     let (sensor_tx, _) = tokio::sync::broadcast::channel::<(usize, SensorFrame)>(256);
-    let (done_tx, mut done_rx) = mpsc::channel::<usize>(8);
 
     // spectator world-state stream for the web viz (port 9771)
     tokio::spawn(frc_sim_m0::viz::run(sensor_tx.clone()));
 
-    for (robot_id, port) in args.nt.iter().enumerate() {
-        if robot_id >= NUM_ROBOTS {
+    for (robot_id, port) in cfg.nt_ports.iter().enumerate() {
+        if robot_id >= num_robots {
             break;
         }
-        tokio::spawn(nt_bridge(
+        tokio::spawn(agents::nt_bridge::run(
             robot_id,
             *port,
             commands.clone(),
@@ -341,33 +149,81 @@ async fn main() -> Result<()> {
         println!("nt bridge for robot {} -> :{}", robot_id, port);
     }
 
-    // physics loop
+    // physics loop: step-count driven (issue #5). `tick` is the only clock.
     {
         let commands = commands.clone();
         let sensor_tx = sensor_tx.clone();
-        let args_archetypes = args.archetype.clone();
-        let archetypes = args_archetypes.clone();
+        let mode = cfg.time_mode;
         tokio::spawn(async move {
-            let mut specs: Vec<RobotSpec> = vec![RobotSpec::default(); NUM_ROBOTS];
-            for (i, path) in archetypes.iter().enumerate().take(NUM_ROBOTS) {
-                match frc_sim_m0::archetype::Archetype::load(path) {
-                    Ok(a) => {
-                        println!("robot {} archetype {:?} ({})", i, a.name, path.display());
-                        specs[i] = RobotSpec::from(&a);
-                    }
-                    Err(e) => eprintln!("failed to load archetype {}: {e:#}", path.display()),
-                }
-            }
-            let mut world = World::with_specs(&specs);
             let mut tick: u64 = 0;
-            let mut iv = interval(Duration::from_micros(2500)); // 400 Hz wall-clock
+            let mut last_cmds: Vec<Option<frc_sim_m0::ActuatorFrame>> = vec![None; num_robots];
+            let mut iv = interval(Duration::from_micros(1_000_000 / PHYSICS_HZ as u64));
             loop {
-                iv.tick().await;
-                let cmds = commands.lock().unwrap().clone();
+                match mode {
+                    TimeMode::Realtime => {
+                        iv.tick().await;
+                    }
+                    TimeMode::Fast => {
+                        // no sleeps; yield periodically so agent tasks can run
+                        if tick % 64 == 0 {
+                            tokio::task::yield_now().await;
+                        }
+                    }
+                    TimeMode::Lockstep => {
+                        if tick % AGENT_EVERY as u64 == 0 && tick > 0 {
+                            // WPILib-style barrier: wait for every connected
+                            // WS agent to push a fresh command (20ms timeout).
+                            let baseline = commands.seqs();
+                            let waiters = commands.ws_connected_robots();
+                            let deadline = tokio::time::Instant::now()
+                                + Duration::from_millis(20);
+                            while tokio::time::Instant::now() < deadline {
+                                if waiters
+                                    .iter()
+                                    .all(|&r| commands.seq(r) > baseline[r])
+                                {
+                                    break;
+                                }
+                                tokio::time::sleep(Duration::from_millis(1)).await;
+                            }
+                        }
+                    }
+                }
+
+                let cmds = commands.snapshot();
+                // event-source the inputs: log a command record on change
+                if let Some(w) = log.as_mut() {
+                    for (r, (new, old)) in
+                        cmds.iter().zip(last_cmds.iter()).enumerate()
+                    {
+                        if new != old {
+                            let _ = w.record(&Record::Cmd {
+                                tick,
+                                robot: r as u32,
+                                cmd: new.clone(),
+                            });
+                        }
+                    }
+                }
+                last_cmds = cmds.clone();
                 world.step(&cmds);
                 if tick % AGENT_EVERY as u64 == 0 {
-                    for r in 0..NUM_ROBOTS {
-                        let _ = sensor_tx.send((r, world.sensor_frame(r, tick)));
+                    for r in 0..num_robots {
+                        let frame = world.sensor_frame(r, tick);
+                        if let Some(w) = log.as_mut() {
+                            let _ = w.record(&Record::State {
+                                tick,
+                                robot: r as u32,
+                                sample: replay::StateSample::from(&frame),
+                            });
+                        }
+                        let _ = sensor_tx.send((r, frame));
+                    }
+                    // periodic flush so a killed server loses at most ~1 s
+                    if tick % PHYSICS_HZ as u64 == 0 {
+                        if let Some(w) = log.as_mut() {
+                            let _ = w.flush();
+                        }
                     }
                 }
                 tick += 1;
@@ -375,73 +231,7 @@ async fn main() -> Result<()> {
         });
     }
 
-    loop {
-        tokio::select! {
-            accepted = listener.accept() => {
-                let (stream, addr) = accepted?;
-                let commands = commands.clone();
-                let mut sensor_rx = sensor_tx.subscribe();
-                let done_tx = done_tx.clone();
-                tokio::spawn(async move {
-                    let Ok(ws) = tokio_tungstenite::accept_async(stream).await else {
-                        return;
-                    };
-                    let (mut sink, mut stream) = ws.split();
-
-                    // first message must be Hello{ robot_id }
-                    let robot_id = match stream.next().await {
-                        Some(Ok(Message::Text(txt))) => {
-                            match serde_json::from_str::<AgentMsg>(&txt) {
-                                Ok(AgentMsg::Hello { robot_id, .. }) if robot_id < NUM_ROBOTS => {
-                                    robot_id
-                                }
-                                _ => return,
-                            }
-                        }
-                        _ => return,
-                    };
-                    println!("agent {} connected -> robot {}", addr, robot_id);
-                    sink.send(Message::Text(
-                        serde_json::to_string(&ServerMsg::Welcome { robot_id }).unwrap().into(),
-                    ))
-                    .await
-                    .ok();
-
-                    let cmd_writer = commands.clone();
-                    let mut read_task = tokio::spawn(async move {
-                        while let Some(Ok(msg)) = stream.next().await {
-                            if let Message::Text(txt) = msg {
-                                if let Ok(AgentMsg::Actuator(a)) =
-                                    serde_json::from_str::<AgentMsg>(&txt)
-                                {
-                                    cmd_writer.lock().unwrap()[robot_id] = Some(a);
-                                }
-                            }
-                        }
-                    });
-
-                    loop {
-                        match sensor_rx.recv().await {
-                            Ok((r, frame)) if r == robot_id => {
-                                let txt = serde_json::to_string(&ServerMsg::Sensor(frame)).unwrap();
-                                if sink.send(Message::Text(txt.into())).await.is_err() {
-                                    break;
-                                }
-                            }
-                            Ok(_) => continue,
-                            Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                            Err(_) => break,
-                        }
-                    }
-                    read_task.abort();
-                    commands.lock().unwrap()[robot_id] = None;
-                    let _ = done_tx.send(robot_id).await;
-                    println!("robot {} disconnected", robot_id);
-                });
-            }
-            Some(id) = done_rx.recv() => {
-                eprintln!("agent {} gone", id);
-            }
-        }
-    }
+    let listener = TcpListener::bind("127.0.0.1:9770").await?;
+    println!("orchestrator listening on ws://127.0.0.1:9770/robot/<id>");
+    agents::ws::serve(listener, num_robots, commands, sensor_tx).await
 }
