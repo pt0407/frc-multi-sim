@@ -5,7 +5,7 @@
 //! Babylon.js client in `web/`.
 
 use anyhow::Result;
-use frc_sim_m0::SensorFrame;
+use crate::SensorFrame;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
 use std::collections::BTreeMap;

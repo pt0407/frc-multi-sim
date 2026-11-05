@@ -1,6 +1,7 @@
 pub mod drivetrain;
 pub mod archetype;
 pub mod nt_server;
+pub mod viz;
 pub mod sim;
 
 use serde::{Deserialize, Serialize};
