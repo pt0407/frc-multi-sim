@@ -364,9 +364,15 @@ impl World {
         // intake is a mechanism command, so it's inert while disabled)
         let robots: Vec<Option<([f32; 3], f32)>> = (0..self.chassis.len())
             .map(|i| {
+                // if the robot has a mechanism arm, intake only works while
+                // the arm is deployed (issue #57 v2: intake<->arm integration)
+                let deployed = self
+                    .mech_angle(i)
+                    .map_or(true, |a| a < 0.5);
                 if phase.enabled()
                     && self.intake_active[i]
                     && self.intakes[i].is_some()
+                    && deployed
                 {
                     let body = &self.bodies[self.chassis[i]];
                     let t = body.translation();
