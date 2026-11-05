@@ -5,7 +5,25 @@ matters: each phase unblocks or de-risks the next. See `../ARCHITECTURE.md` for
 the design rationale and `PLAN.md`'s dependency graph for ordering constraints.
 
 **Legend:** `[issue #N]` = tracked on GitHub · `[new]` = needs an issue filed ·
-`[blocked]` = external dependency.
+`[blocked]` = external dependency · `[done]` = merged.
+
+---
+
+## Status snapshot (2026-11-05)
+
+**Landed:** A1 determinism/replay (#5) + A4 refactor (#21) via PR #34 ·
+#2 traction model · #3 game pieces + scoring · #4 web viz · #7 sensor noise ·
+#8 archetypes · #9 CI · #10 match state machine · #14 field config ·
+#22 AdvantageScope publishing · trajectory agent (PR #41, open).
+
+**Open, plan-relevant:** #6 WPILib adapter `[blocked: JDK+Gradle]` ·
+#11 scale to 6 robots · #12 RL obs/actor · #13 gamepad agent ·
+#26–29 bug reports (NT bridge leak, contact_impulse, drive panic, robustness) ·
+#30–33 ideas (headless sim bin, AgentMsg replay, fault injection, match-state API) ·
+#40 chassis friction bug · #42 real field import · #43 robot CAD pipeline ·
+#44 physics-constants alignment · #23 per-game configs · #24 WASM · #25 M4 validation.
+
+**Duplicates still open:** #15, #16 (close when convenient).
 
 ---
 
@@ -218,6 +236,42 @@ Distinct from A3's *archetype* configs — this is the *game* layer:
 
 ---
 
+## Phase C+ — Realism & identity (new, from fieldcore research)
+
+Researched 2026-11-05 (full writeup on #43). Core insight: an FRC robot in
+match sim is ONE rigid body + mechanism proxies — CAD integration needs only
+visual mesh + collision proxy + mass properties, not articulated URDF.
+
+### C+1. [#42] Import real 2026 REBUILT field
+- fieldcore ships `field.glb` (17 MB, official AdvantageScope 2026 package)
+  + `gamepiece.glb` (Fuel). Babylon imports GLB natively.
+- Colliders: Rapier `trimesh` is correct for STATIC field geometry (hollow
+  is fine — field never moves); fieldcore's recipe = mesh colliders on GLB
+  submeshes filtered by name/vertex-count.
+- Correct dims: field is **16.541 × 8.069 m** (ours: 16.5 × 8.0 — fix half_z).
+- `fields/rebuilt.toml` gains a `mesh` source alongside primitives.
+
+### C+2. [#44] Align physics constants with reference values
+- fieldcore constants extracted: fuel 0.215 kg / 0.15 m / friction 0.6 /
+  restitution 0.18 / damping 0.16+0.22; chassis friction **0.04** (confirms
+  #40); field friction 0.82 / restitution 0.08.
+- Audit `world/pieces.rs` + `world/chassis.rs`; record provenance per constant.
+
+### C+3. [#43] Robot CAD pipeline — "team code + CAD → launchable robot"
+- **v1:** `robots/<name>/robot.toml` (archetype) + `mesh.glb` (visual only) +
+  code endpoint. Babylon renders the GLB; physics keeps primitives. Ships
+  immediately — teams see their actual robot.
+- **v2:** auto collision fit — gltf → `MeshConverter::ConvexDecomposition`
+  (VHACD, target <~20 convex pieces for the 400 Hz budget); import mass
+  properties (mass/CoM/**inertia tensor** — governs contact rotation).
+- **v3 (maybe never):** articulated mechanisms via `onshape-to-robot` URDF —
+  only if mechanism proxies prove insufficient.
+- Convention: floor-center pivot, +X forward, Y-up, meters. Manual GLB export
+  (Onshape/Fusion both export glTF) beats API-key onboarding for v1.
+- Verify VHACD determinism for replay-diff (#5 contract).
+
+---
+
 ## Phase D — RL (M3)
 
 ### D1. [#12] RL observation vector + actor scaffold
@@ -279,19 +333,20 @@ E1(M4)  — last; consumes everything
 
 ## Critical path
 
-`A1 → A2 → A3/A4 → B1 → B2 → B3 → C1 → C2 → C3 → D1 → E1`
+`#40 → #11 → #42 → #43-v1 → C3(#10 follow-ups) → D1 → E1`
 
-- **A1 (#5) is the keystone** — determinism + replay makes everything else
-  testable. Do not skip.
-- **A4 (refactor) gates Phase C** — scaling to 6 robots in a monolith is how
-  you get unmergeable PRs.
-- **B1 (#2) before B3 (#3)** — the drivetrain work changes the actuator
-  contract; game pieces and match logic must be built on the final contract.
-- **E1 is the payoff** — schedule it last but file the issue now so it
-  doesn't get forgotten.
+- **#40 (chassis friction) is the new keystone-adjacent bug** — every agent
+  silently stalls under ~530 N; fix before scaling agents or tuning RL.
+- **#11 (6 robots) is next structural work** — Phase C core.
+- **#42/#43 are the "looks like a real FRC sim" payoff** — fieldcore proved
+  the assets exist; viz + physics integration is mostly plumbing.
+- **E1 is the credibility payoff** — schedule last but keep the issue warm.
 
-## Suggested first PR
+## Suggested next PRs (post-#34 world)
 
-A combined **A1 + A2** PR is the best opening move: determinism core plus CI
-that proves it. It's self-contained, touches mostly `server.rs`/new modules,
-and every subsequent issue gets easier the moment it lands.
+1. **#40 friction fix** — one-line-ish collider change + golden re-record;
+   unblocks honest agent development.
+2. **#11 six-robot scale** — audit `NUM_ROBOTS`, command slots, the
+   `1 - robot` contact filter (now per-pair in world/), spawn zones.
+3. **#42 field import spike** — GLB → Babylon + trimesh colliders; biggest
+   visual jump per effort.
