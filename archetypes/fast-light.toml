@@ -1,0 +1,6 @@
+# Light, quick robot: low mass, high power-to-weight, smaller bumpers.
+name = "fast-light"
+mass = 35.0
+half_extents = [0.32, 0.30, 0.32]
+max_force = 1400.0
+drivetrain = "swerve-fast"   # placeholder profile name

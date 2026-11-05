@@ -1,3 +1,4 @@
+pub mod archetype;
 pub mod nt_server;
 
 use serde::{Deserialize, Serialize};

@@ -14,3 +14,4 @@ anyhow = "1"
 futures-util = "0.3"
 nt_client = "0.5.1"
 rmpv = { version = "1", features = ["with-serde"] }
+toml = "0.8"

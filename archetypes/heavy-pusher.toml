@@ -1,0 +1,6 @@
+# Heavy defensive pusher: lots of mass and grunt, slow to accelerate.
+name = "heavy-pusher"
+mass = 90.0
+half_extents = [0.45, 0.40, 0.45]
+max_force = 1800.0
+drivetrain = "tank-push"     # placeholder profile name
