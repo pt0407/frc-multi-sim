@@ -1,6 +1,7 @@
 use anyhow::Result;
 use clap::Parser;
 use futures_util::{SinkExt, StreamExt};
+use frc_sim_m0::drivetrain::{rot2, yaw_from_quat, Drivetrain};
 use frc_sim_m0::{ActuatorFrame, AgentMsg, SensorFrame, ServerMsg};
 use frc_sim_m0::nt_client_min::NtClient;
 use rapier3d::prelude::*;
@@ -33,6 +34,7 @@ struct World {
     query: QueryPipeline,
     chassis: Vec<RigidBodyHandle>,
     chassis_colliders: Vec<ColliderHandle>,
+    drivetrains: Vec<Drivetrain>,
 }
 
 impl World {
@@ -55,6 +57,12 @@ impl World {
             query: QueryPipeline::new(),
             chassis: Vec::new(),
             chassis_colliders: Vec::new(),
+            // default profile: 4-module swerve per robot (issue #2). The
+            // legacy `Drivetrain::simple` sliding box remains available as a
+            // fallback profile. Config-file selection is issue #8.
+            drivetrains: (0..NUM_ROBOTS)
+                .map(|_| Drivetrain::swerve(ROBOT_MASS, ROBOT_HALF))
+                .collect(),
         };
 
         // ground
@@ -116,11 +124,34 @@ impl World {
     fn step(&mut self, commands: &[Option<ActuatorFrame>; NUM_ROBOTS]) {
         for (i, handle) in self.chassis.iter().enumerate() {
             if let Some(cmd) = &commands[i] {
+                // per-wheel traction model: resolve the actuator command into
+                // module forces (grip-limited), then apply them off-center so
+                // yaw torque emerges from the force placement.
+                let (yaw, pos) = {
+                    let body = &self.bodies[*handle];
+                    let r = body.rotation();
+                    (yaw_from_quat([r.i, r.j, r.k, r.w]), *body.translation())
+                };
+                let resolved = self.drivetrains[i].resolve(cmd, yaw);
                 let body = &mut self.bodies[*handle];
                 body.reset_forces(true);
                 body.reset_torques(true);
-                body.add_force(vector![cmd.force[0], 0.0, cmd.force[1]], true);
-                body.add_torque(vector![0.0, cmd.torque, 0.0], true);
+                for f in &resolved {
+                    // apply at the wheel's ground contact point
+                    let p = rot2(f.local_point, yaw);
+                    body.add_force_at_point(
+                        vector![f.force[0], 0.0, f.force[1]],
+                        point![pos.x + p[0], 0.05, pos.z + p[1]],
+                        true,
+                    );
+                    if f.torque != 0.0 {
+                        body.add_torque(vector![0.0, f.torque, 0.0], true);
+                    }
+                }
+            } else {
+                let body = &mut self.bodies[*handle];
+                body.reset_forces(true);
+                body.reset_torques(true);
             }
         }
         self.pipeline.step(
@@ -203,8 +234,11 @@ async fn nt_bridge(
                     let fx = client.get_f64("/sim/cmd_fx").unwrap_or(0.0) as f32;
                     let fz = client.get_f64("/sim/cmd_fz").unwrap_or(0.0) as f32;
                     let tq = client.get_f64("/sim/cmd_torque").unwrap_or(0.0) as f32;
-                    commands.lock().unwrap()[robot_id] =
-                        Some(ActuatorFrame { force: [fx, fz], torque: tq });
+                    commands.lock().unwrap()[robot_id] = Some(ActuatorFrame {
+                        force: [fx, fz],
+                        torque: tq,
+                        modules: None,
+                    });
                 }
             });
         }

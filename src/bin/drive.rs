@@ -83,6 +83,7 @@ async fn main() -> Result<()> {
             serde_json::to_string(&AgentMsg::Actuator(ActuatorFrame {
                 force: [fx, fz],
                 torque: 0.0,
+                modules: None,
             }))
             .unwrap()
             .into(),
