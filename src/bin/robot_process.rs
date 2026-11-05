@@ -15,11 +15,26 @@ struct Args {
     target: Vec<f64>,
     #[arg(long, default_value_t = 1200.0)]
     max_force: f64,
+    /// archetype TOML; its max_force overrides --max-force
+    #[arg(long)]
+    archetype: Option<std::path::PathBuf>,
 }
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let args = Args::parse();
+    let arch = frc_sim_m0::archetype::Archetype::load_opt(&args.archetype)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()))?;
+    let max_force = arch
+        .as_ref()
+        .map(|a| a.max_force as f64)
+        .unwrap_or(args.max_force);
+    if let Some(a) = &arch {
+        println!(
+            "archetype {:?}: mass={} half={:?} max_force={} drivetrain={}",
+            a.name, a.mass, a.half_extents, a.max_force, a.drivetrain
+        );
+    }
     let nt = NtServer::start(&format!("127.0.0.1:{}", args.port)).await?;
     println!("robot NT4 server on :{}", args.port);
 
@@ -47,9 +62,9 @@ async fn main() -> std::io::Result<()> {
         let mut fx = 300.0 * ex - 60.0 * vx;
         let mut fz = 300.0 * ez - 60.0 * vz;
         let mag = (fx * fx + fz * fz).sqrt();
-        if mag > args.max_force {
-            fx *= args.max_force / mag;
-            fz *= args.max_force / mag;
+        if mag > max_force {
+            fx *= max_force / mag;
+            fz *= max_force / mag;
         }
 
         if contact > 0.0 {

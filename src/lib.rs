@@ -1,4 +1,5 @@
 pub mod drivetrain;
+pub mod archetype;
 pub mod nt_server;
 pub mod sim;
 

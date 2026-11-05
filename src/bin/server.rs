@@ -40,7 +40,8 @@ struct World {
 }
 
 impl World {
-    fn new() -> Self {
+    /// Arena only: pipeline + ground + walls, no robots yet.
+    fn arena() -> Self {
         let mut w = World {
             pipeline: PhysicsPipeline::new(),
             gravity: vector![0.0, -9.81, 0.0],
@@ -94,12 +95,50 @@ impl World {
             );
         }
 
+        w
+    }
+}
+
+/// Spawn-time physical params for one robot (archetype or default).
+#[derive(Clone, Copy)]
+pub struct RobotSpec {
+    pub mass: f32,
+    pub half_extents: [f32; 3],
+}
+
+impl Default for RobotSpec {
+    fn default() -> Self {
+        RobotSpec {
+            mass: ROBOT_MASS,
+            half_extents: [ROBOT_HALF; 3],
+        }
+    }
+}
+
+impl From<&frc_sim_m0::archetype::Archetype> for RobotSpec {
+    fn from(a: &frc_sim_m0::archetype::Archetype) -> Self {
+        RobotSpec {
+            mass: a.mass,
+            half_extents: a.half_extents,
+        }
+    }
+}
+
+impl World {
+    fn new() -> Self {
+        Self::with_specs(&[RobotSpec::default(); NUM_ROBOTS])
+    }
+
+    fn with_specs(specs: &[RobotSpec]) -> Self {
+        let mut w = Self::arena();
         // chassis: robot 0 at (-4, 0), robot 1 at (4, 0)
         for (i, x) in [-4.0f32, 4.0].iter().enumerate() {
+            let spec = &specs[i];
+            let [hx, hy, hz] = spec.half_extents;
             let body = w.bodies.insert(
                 RigidBodyBuilder::dynamic()
-                    .translation(vector![*x, ROBOT_HALF + 0.05, 0.0])
-                    .additional_mass(ROBOT_MASS)
+                    .translation(vector![*x, hy + 0.05, 0.0])
+                    .additional_mass(spec.mass)
                     .linear_damping(1.0)
                     .angular_damping(4.0)
                     // lock X/Z rotation: chassis stays upright (2.5D drive, 3D contacts)
@@ -108,7 +147,7 @@ impl World {
                     .build(),
             );
             let col = w.colliders.insert_with_parent(
-                ColliderBuilder::cuboid(ROBOT_HALF, ROBOT_HALF, ROBOT_HALF)
+                ColliderBuilder::cuboid(hx, hy, hz)
                     .friction(0.9)
                     .restitution(0.1)
                     .density(1.0)
@@ -118,7 +157,10 @@ impl World {
             );
             w.chassis.push(body);
             w.chassis_colliders.push(col);
-            println!("robot {} spawned at x={}", i, x);
+            println!(
+                "robot {} spawned at x={} mass={} half={:?}",
+                i, x, spec.mass, spec.half_extents
+            );
         }
         w
     }
@@ -205,6 +247,10 @@ struct Args {
     /// NT4 server ports to bridge, indexed by robot id (e.g. --nt 5810 --nt 5820)
     #[arg(long)]
     nt: Vec<u16>,
+    /// Archetype TOML per robot slot (repeatable, indexed by robot id).
+    /// e.g. --archetype archetypes/fast-light.toml --archetype archetypes/heavy-pusher.toml
+    #[arg(long)]
+    archetype: Vec<std::path::PathBuf>,
 }
 
 /// NT4 bridge: orchestrator acts as an NT client to a robot's own NT server —
@@ -299,8 +345,20 @@ async fn main() -> Result<()> {
     {
         let commands = commands.clone();
         let sensor_tx = sensor_tx.clone();
+        let args_archetypes = args.archetype.clone();
+        let archetypes = args_archetypes.clone();
         tokio::spawn(async move {
-            let mut world = World::new();
+            let mut specs: Vec<RobotSpec> = vec![RobotSpec::default(); NUM_ROBOTS];
+            for (i, path) in archetypes.iter().enumerate().take(NUM_ROBOTS) {
+                match frc_sim_m0::archetype::Archetype::load(path) {
+                    Ok(a) => {
+                        println!("robot {} archetype {:?} ({})", i, a.name, path.display());
+                        specs[i] = RobotSpec::from(&a);
+                    }
+                    Err(e) => eprintln!("failed to load archetype {}: {e:#}", path.display()),
+                }
+            }
+            let mut world = World::with_specs(&specs);
             let mut tick: u64 = 0;
             let mut iv = interval(Duration::from_micros(2500)); // 400 Hz wall-clock
             loop {

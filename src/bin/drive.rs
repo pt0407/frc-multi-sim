@@ -20,11 +20,22 @@ struct Args {
     /// max drive force (N) — the "archetype" stat
     #[arg(long, default_value_t = 1200.0)]
     max_force: f32,
+    /// archetype TOML; its max_force overrides --max-force
+    #[arg(long)]
+    archetype: Option<std::path::PathBuf>,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+    let arch = frc_sim_m0::archetype::Archetype::load_opt(&args.archetype)?;
+    let max_force = arch.as_ref().map(|a| a.max_force).unwrap_or(args.max_force);
+    if let Some(a) = &arch {
+        println!(
+            "archetype {:?}: mass={} half={:?} max_force={} drivetrain={}",
+            a.name, a.mass, a.half_extents, a.max_force, a.drivetrain
+        );
+    }
     let (ws, _) = connect_async("ws://127.0.0.1:9770").await?;
     let (mut sink, mut stream) = ws.split();
 
@@ -41,7 +52,7 @@ async fn main() -> Result<()> {
     let [tx, tz] = [args.target[0], args.target[1]];
     println!(
         "robot {} driving toward ({}, {}) max_force={}",
-        args.robot_id, tx, tz, args.max_force
+        args.robot_id, tx, tz, max_force
     );
 
     while let Some(Ok(msg)) = stream.next().await {
@@ -64,9 +75,9 @@ async fn main() -> Result<()> {
             let mut fx = k_p * ex - k_d * s.linvel[0];
             let mut fz = k_p * ez - k_d * s.linvel[2];
             let mag = (fx * fx + fz * fz).sqrt();
-            if mag > args.max_force {
-                fx *= args.max_force / mag;
-                fz *= args.max_force / mag;
+            if mag > max_force {
+                fx *= max_force / mag;
+                fz *= max_force / mag;
             }
             (fx, fz)
         };

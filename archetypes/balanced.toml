@@ -1,0 +1,6 @@
+# Mid-weight all-rounder (~historical defaults).
+name = "balanced"
+mass = 60.0
+half_extents = [0.40, 0.40, 0.40]
+max_force = 1200.0
+drivetrain = "swerve"        # placeholder profile name
