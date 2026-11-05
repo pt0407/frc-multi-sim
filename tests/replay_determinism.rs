@@ -71,6 +71,7 @@ fn header() -> LogHeader {
         config_hash: frc_sim_m0::config::SimConfig::config_hash(&chassis::default_specs()),
         specs: chassis::default_specs(),
         pieces: None,
+        match_cfg: None,
     }
 }
 

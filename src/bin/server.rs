@@ -249,6 +249,7 @@ async fn main() -> Result<()> {
                 ),
                 specs: specs.clone(),
                 pieces: Some(piece_table.clone()),
+                match_cfg: Some(match_cfg),
             };
             println!("recording event log -> {}", path.display());
             Some(LogWriter::create(path, &header)?)

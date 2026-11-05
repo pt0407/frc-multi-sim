@@ -44,7 +44,7 @@ use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 
 const MAGIC: &[u8; 4] = b"FMSL";
-const FORMAT_VERSION: u32 = 3;
+const FORMAT_VERSION: u32 = 4;
 const KIND_CMD: u8 = 1;
 const KIND_STATE: u8 = 2;
 
@@ -56,6 +56,10 @@ pub struct LogHeader {
     pub specs: Vec<RobotSpec>,
     /// game-piece spawn/scoring table (v2 headers; None for v1 logs)
     pub pieces: Option<PieceTable>,
+    /// match clock config (v4 headers; None for v1-v3 logs). Pins the
+    /// phase durations so replayed matches transition identically even
+    /// under a non-default --game (issue #10 follow-up).
+    pub match_cfg: Option<crate::r#match::MatchConfig>,
 }
 
 #[derive(Debug, Clone)]
@@ -179,6 +183,18 @@ impl LogWriter {
                     w.write_all(&h.entry_height.to_le_bytes())?;
                     w.write_all(&h.alliance.to_le_bytes())?;
                 }
+            }
+            None => w.write_all(&[0])?,
+        }
+        // v4: match clock config
+        match &header.match_cfg {
+            Some(m) => {
+                w.write_all(&[1])?;
+                for v in [m.disabled_s, m.auto_s, m.teleop_s, m.endgame_s] {
+                    w.write_all(&v.to_le_bytes())?;
+                }
+                w.write_all(&m.climb_bonus_points.to_le_bytes())?;
+                w.write_all(&m.climb_radius_m.to_le_bytes())?;
             }
             None => w.write_all(&[0])?,
         }
@@ -401,6 +417,31 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
         } else {
             None
         },
+        // v4: match clock config
+        match_cfg: if fmt >= 4 {
+            let mut b = [0u8; 1];
+            r.read_exact(&mut b)?;
+            if b[0] != 0 {
+                let d = r_f32(&mut r)?;
+                let a = r_f32(&mut r)?;
+                let t = r_f32(&mut r)?;
+                let e = r_f32(&mut r)?;
+                let c = r_u32(&mut r)?;
+                let rad = r_f32(&mut r)?;
+                Some(crate::r#match::MatchConfig {
+                    disabled_s: d,
+                    auto_s: a,
+                    teleop_s: t,
+                    endgame_s: e,
+                    climb_bonus_points: c,
+                    climb_radius_m: rad,
+                })
+            } else {
+                None
+            }
+        } else {
+            None
+        },
     };
     let mut records = Vec::new();
     loop {
@@ -527,6 +568,11 @@ pub fn replay(header: &LogHeader, records: &[Record]) -> Vec<(u64, u32, StateSam
         FieldSpec::default(),
         header.pieces.as_ref().unwrap_or(&empty),
     );
+    // v4: pin the recorded match clock (issue #10 follow-up); v1-v3 logs
+    // keep the default clock
+    if let Some(m) = header.match_cfg {
+        world.match_clock = crate::r#match::MatchClock::new(m);
+    }
     let n = world.num_robots();
     let mut cmds: Vec<Option<ActuatorFrame>> = vec![None; n];
     let cmd_events: Vec<&Record> = records
