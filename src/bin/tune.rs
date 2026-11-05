@@ -13,12 +13,15 @@ use frc_sim_m0::ActuatorFrame;
 struct Args {
     /// recorded log to tune against
     log: std::path::PathBuf,
-    /// friction values to sweep
+    /// chassis friction values to sweep
     #[arg(long, value_delimiter = ',')]
     friction: Vec<f32>,
+    /// drivetrain mu values to sweep
+    #[arg(long, value_delimiter = ',')]
+    mu: Vec<f32>,
 }
 
-fn run(header: &replay::LogHeader, cmds: &[(u64, u32, Option<ActuatorFrame>)], last: u64, friction: f32) -> Vec<(u64, u32, StateSample)> {
+fn run(header: &replay::LogHeader, cmds: &[(u64, u32, Option<ActuatorFrame>)], last: u64, friction: f32, mu: f32) -> Vec<(u64, u32, StateSample)> {
     let empty = PieceTable::default();
     let mut world = World::with_config(
         &header.specs,
@@ -27,6 +30,7 @@ fn run(header: &replay::LogHeader, cmds: &[(u64, u32, Option<ActuatorFrame>)], l
         header.pieces.as_ref().unwrap_or(&empty),
     );
     world.set_chassis_friction(friction);
+    world.set_drivetrain_mu(mu);
     let n = world.num_robots();
     let mut cur: Vec<Option<ActuatorFrame>> = vec![None; n];
     let mut ev = 0;
@@ -67,8 +71,10 @@ fn main() -> Result<()> {
         .collect();
     let last = golden.iter().map(|g| g.0).max().unwrap_or(0);
 
-    for &f in &args.friction {
-        let actual = run(&header, &cmds, last, f);
+    let frictions = if args.friction.is_empty() { vec![0.04] } else { args.friction };
+    let mus = if args.mu.is_empty() { vec![1.2] } else { args.mu };
+    for (&f, &mu) in frictions.iter().zip(mus.iter().cycle()) {
+        let actual = run(&header, &cmds, last, f, mu);
         let div = replay::diff(&golden, &actual, 0.0);
         // mean position error as the divergence metric
         use std::collections::HashMap;
@@ -84,8 +90,8 @@ fn main() -> Result<()> {
             }
         }
         println!(
-            "friction={:.3} mean_pos_err={:.4}m samples={} first_divergence={:?}",
-            f,
+            "friction={:.3} mu={:.3} mean_pos_err={:.4}m samples={} first_divergence={:?}",
+            f, mu,
             sum / n.max(1) as f64,
             n,
             div.map(|d| (d.tick, d.magnitude))

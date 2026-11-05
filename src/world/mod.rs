@@ -446,6 +446,14 @@ impl World {
 
     /// Arm joint angle for mechanism telemetry/tests (issue #57 spike).
     /// `None` when the robot has no `[mech]`.
+    /// Set drivetrain wheel-carpet mu for every robot (M4 tuning knob —
+    /// the parameter that actually moves trajectories post-#48).
+    pub fn set_drivetrain_mu(&mut self, mu: f32) {
+        for d in &mut self.drivetrains {
+            d.mu = mu;
+        }
+    }
+
     /// Set the chassis collider friction for every robot (M4 tuning knob).
     pub fn set_chassis_friction(&mut self, friction: f32) {
         for &h in &self.chassis_colliders {
