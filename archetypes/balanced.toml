@@ -5,6 +5,14 @@ half_extents = [0.40, 0.40, 0.40]
 max_force = 1200.0
 drivetrain = "swerve"        # placeholder profile name
 
+# Visual model (issue #43): display-only GLB, fetched by
+# `cd web && npm run fetch-assets` (provenance in web/ASSETS.md).
+[model]
+url = "/robot-assets/kitbot-2026.glb"
+scale = 1.0
+offset = [-0.30, 0.0, 0.05]
+rotation_deg = [90.0, 0.0, 90.0]
+
 # Sensor noise + vision latency model (issue #7).
 # presets: "off" (default), "clean", "competition"
 [sensors]

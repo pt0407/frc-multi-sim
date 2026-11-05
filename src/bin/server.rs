@@ -314,6 +314,7 @@ async fn main() -> Result<()> {
         sensor_tx.clone(),
         world_tx.clone(),
         field.clone(),
+        specs.clone(),
     ));
 
     // AdvantageScope-compatible NT4 debug publisher (issue #22)

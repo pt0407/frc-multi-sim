@@ -359,6 +359,9 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
                         spawn,
                         intake,
                         sensors,
+                        // visual-only (issue #43); not serialized into
+                        // replay headers, replays reconstruct it as absent
+                        model: None,
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
