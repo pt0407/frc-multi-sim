@@ -16,6 +16,29 @@
   <body>
     <canvas id="renderCanvas"></canvas>
     <div id="hud">connecting…</div>
+    <div id="ctrl" style="position:fixed;top:8px;right:8px;background:rgba(10,14,20,.85);color:#dfe6ee;padding:10px 12px;border-radius:8px;font:12px monospace;z-index:10">
+      <b>match</b><br>
+      phase: <span id="c-phase">—</span> <span id="c-time"></span><br>
+      score: <span id="c-score">—</span><br>
+      <button data-p="auto">auto</button>
+      <button data-p="teleop">teleop</button>
+      <button data-p="endgame">endgame</button>
+      <button data-p="complete">end</button>
+      <button id="c-clear">clock</button>
+    </div>
+    <script>
+      const cws = new WebSocket("ws://127.0.0.1:9772");
+      cws.onmessage = (e) => {
+        const s = JSON.parse(e.data);
+        document.getElementById("c-phase").textContent = s.phase;
+        document.getElementById("c-time").textContent = s.time_remaining.toFixed(0) + "s";
+        document.getElementById("c-score").textContent = s.scores.join("–");
+      };
+      for (const b of document.querySelectorAll("#ctrl button[data-p]"))
+        b.onclick = () => cws.send(JSON.stringify({op:"set_phase", phase:b.dataset.p}));
+      document.getElementById("c-clear").onclick =
+        () => cws.send(JSON.stringify({op:"clear_phase"}));
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
