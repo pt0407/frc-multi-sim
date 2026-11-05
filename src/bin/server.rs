@@ -450,6 +450,9 @@ async fn main() -> Result<()> {
                         held: world.held.clone(),
                         match_state: world.match_clock.phase_at(tick),
                         match_time: world.match_clock.time_remaining(tick),
+                        mech_angles: (0..world.num_robots())
+                            .map(|r| world.mech_angle(r))
+                            .collect(),
                     });
                     // periodic flush so a killed server loses at most ~1 s
                     if tick % PHYSICS_HZ as u64 == 0 {

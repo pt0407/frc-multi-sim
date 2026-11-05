@@ -33,6 +33,8 @@ pub struct VizFrame {
     /// current match phase + seconds remaining in it (issue #10)
     pub match_state: crate::r#match::MatchPhase,
     pub match_time: f32,
+    /// per-robot mechanism arm joint angle (rad), None when unmechanized
+    pub mech_angles: Vec<Option<f32>>,
 }
 
 /// Emit the loaded field layout (issue #14) so web clients can render the
@@ -100,6 +102,7 @@ async fn state_collector(
         held: Vec::new(),
         match_state: crate::r#match::MatchPhase::Disabled,
         match_time: 0.0,
+        mech_angles: Vec::new(),
     };
     let mut iv = interval(Duration::from_secs_f32(1.0 / VIZ_HZ));
     loop {
