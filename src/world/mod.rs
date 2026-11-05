@@ -372,7 +372,7 @@ impl World {
                         mcmd.target.clamp(m.spec.limits[0], m.spec.limits[1]);
                     if let Some(j) = self.impulse_joints.get_mut(m.joint) {
                         j.data.set_motor_position(
-                            JointAxis::AngX,
+                            m.axis,
                             target,
                             m.spec.motor_stiffness,
                             m.spec.motor_damping,

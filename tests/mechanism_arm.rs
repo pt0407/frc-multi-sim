@@ -17,6 +17,7 @@ const SEED: u64 = 0x57;
 /// Intake arm hung off the front-top bumper corner (see MechSpec docs).
 fn arm_spec() -> MechSpec {
     MechSpec {
+        joint_type: frc_sim_m0::archetype::JointType::Revolute,
         pivot: [0.40, 0.35, 0.0],
         half_extents: [0.35, 0.03, 0.35],
         mass: 4.0,

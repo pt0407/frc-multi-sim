@@ -37,6 +37,9 @@ pub struct Mech {
     pub joint: ImpulseJointHandle,
     /// spawn-time spec (motor gains, limits) for command application
     pub spec: MechSpec,
+    /// joint axis the motor positions along (AngX for revolute,
+    /// LinY for prismatic) — command application needs it (issue #61)
+    pub axis: JointAxis,
 }
 
 /// Spawn the arm body + collider + revolute joint for `spec`, attached to
@@ -83,7 +86,10 @@ pub fn spawn_arm(
         arm,
         bodies,
     );
-    let joint = RevoluteJointBuilder::new(Vector::z_axis())
+    let joint: GenericJoint = match spec.joint_type {
+        crate::archetype::JointType::Revolute => RevoluteJointBuilder::new(
+            Vector::z_axis(),
+        )
         .local_anchor1(point![
             spec.pivot[0],
             spec.pivot[1],
@@ -94,15 +100,48 @@ pub fn spawn_arm(
         .contacts_enabled(false)
         .limits(spec.limits)
         .motor_model(MotorModel::ForceBased)
-        .motor_position(spec.stow_angle, spec.motor_stiffness, spec.motor_damping)
+        .motor_position(
+            spec.stow_angle,
+            spec.motor_stiffness,
+            spec.motor_damping,
+        )
         .motor_max_force(spec.motor_max_force)
-        .build();
+        .build()
+        .into(),
+        crate::archetype::JointType::Prismatic => {
+            // elevator-stage pattern: slides vertically on the chassis
+            // pivot, motor lifts on the local Y axis (issue #61)
+            PrismaticJointBuilder::new(Vector::y_axis())
+                .local_anchor1(point![
+                    spec.pivot[0],
+                    spec.pivot[1],
+                    spec.pivot[2]
+                ])
+                .local_anchor2(point![0.0, 0.0, 0.0])
+                .contacts_enabled(false)
+                .limits(spec.limits)
+                .motor_model(MotorModel::ForceBased)
+                .motor_position(
+                    spec.stow_angle,
+                    spec.motor_stiffness,
+                    spec.motor_damping,
+                )
+                .motor_max_force(spec.motor_max_force)
+                .build()
+                .into()
+        }
+    };
     let jh = joints.insert(chassis, arm, joint, true);
+    let axis = match spec.joint_type {
+        crate::archetype::JointType::Revolute => JointAxis::AngX,
+        crate::archetype::JointType::Prismatic => JointAxis::LinY,
+    };
     Mech {
         arm,
         arm_collider,
         joint: jh,
         spec: *spec,
+        axis,
     }
 }
 

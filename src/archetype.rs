@@ -127,8 +127,22 @@ pub struct IntakeSpec {
 /// motor_damping = 30.0
 /// motor_max_force = 400.0          # N*m
 /// ```
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum JointType {
+    /// pivot joint — intake arms, hoppers
+    #[default]
+    Revolute,
+    /// sliding joint along +y — elevators, climbers
+    Prismatic,
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
 pub struct MechSpec {
+    /// joint type (issue #61): "revolute" (arm) or "prismatic" (elevator
+    /// stage sliding on a vertical axis). Default revolute.
+    #[serde(default)]
+    pub joint_type: JointType,
     /// chassis-frame pivot point [x, y, z]
     pub pivot: [f32; 3],
     /// arm cuboid half-extents [x, y, z]; x is along the arm
