@@ -314,6 +314,25 @@ function connect() {
       return;
     }
     // game pieces (free ones only; held/scored are not in the list)
+    if ((msg as any).hub_active !== undefined) {
+      const h = (msg as any).hub_active;
+      document.title = h === null ? "REBUILT sim" : `${h === 0 ? "RED" : "BLUE"} HUB ACTIVE`;
+      const banner = document.getElementById("hub-banner") || (() => {
+        const d = document.createElement("div");
+        d.id = "hub-banner";
+        d.style.cssText = "position:fixed;top:8px;left:50%;transform:translateX(-50%);padding:8px 18px;border-radius:8px;font:700 18px monospace;z-index:20;display:none";
+        document.body.appendChild(d);
+        return d;
+      })();
+      if (h === null) {
+        banner.style.display = "none";
+      } else {
+        banner.style.display = "block";
+        banner.textContent = `${h === 0 ? "RED" : "BLUE"} HUB ACTIVE`;
+        banner.style.background = h === 0 ? "rgba(200,30,30,.85)" : "rgba(30,60,200,.85)";
+        banner.style.color = "#fff";
+      }
+    }
     const plist = msg.pieces ?? [];
     for (let i = 0; i < MAX_PIECES; i++) {
       const m = pieceMesh(i);

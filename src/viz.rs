@@ -33,6 +33,9 @@ pub struct VizFrame {
     /// current match phase + seconds remaining in it (issue #10)
     pub match_state: crate::r#match::MatchPhase,
     pub match_time: f32,
+    /// which alliance hub is scoring-active during teleop shifts
+    /// (None = both active). Clients show "RED/BLUE HUB ACTIVE" (issue #10)
+    pub hub_active: Option<usize>,
     /// per-robot mechanism arm joint angle (rad), None when unmechanized
     pub mech_angles: Vec<Option<f32>>,
 }
@@ -108,6 +111,7 @@ async fn state_collector(
         held: Vec::new(),
         match_state: crate::r#match::MatchPhase::Disabled,
         match_time: 0.0,
+        hub_active: None,
         mech_angles: Vec::new(),
     };
     let mut iv = interval(Duration::from_secs_f32(1.0 / VIZ_HZ));
@@ -154,6 +158,7 @@ async fn state_collector(
                     "held": world_state.held,
                     "match_state": world_state.match_state.name(),
                     "match_time": world_state.match_time,
+                    "hub_active": world_state.hub_active,
                 })
                 .to_string();
                 // ok if no spectators connected

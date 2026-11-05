@@ -483,6 +483,19 @@ async fn main() -> Result<()> {
                             held: world.held.clone(),
                             match_state: world.match_clock.phase_at(tick),
                             match_time: world.match_clock.time_remaining(tick),
+                            hub_active: if world.match_clock.config.shift_s
+                                > 0.0
+                                && world.match_clock.phase_at(tick)
+                                    == frc_sim_m0::r#match::MatchPhase::Teleop
+                            {
+                                Some(if world.match_clock.hub_active(0, tick) {
+                                    0
+                                } else {
+                                    1
+                                })
+                            } else {
+                                None
+                            },
                             mech_angles: (0..world.num_robots())
                                 .map(|r| world.mech_angle(r))
                                 .collect(),
