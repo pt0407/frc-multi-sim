@@ -114,7 +114,7 @@ function pieceMesh(i: number): Mesh {
 
 async function tryLoadFieldGlb(url: string): Promise<boolean> {
   try {
-    const res = await SceneLoader.ImportMeshAsync("", location.origin, url, scene);
+    const res = await SceneLoader.ImportMeshAsync("", "", url, scene);
     for (const m of res.meshes) {
       if (/fuel/i.test(m.name)) m.setEnabled(false);
     }
