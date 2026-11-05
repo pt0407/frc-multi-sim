@@ -666,6 +666,9 @@ impl World {
             match_time: self.time_remaining_at_tick(tick),
             vision_pose: None,
             mech_angle: self.mech_angle(robot),
+            hub_active: self
+                .match_clock
+                .hub_active(robot % self.scores.len(), tick),
         };
         // noise layer: no-op (and zero RNG draws) when disabled
         let true_pos = frame.position;

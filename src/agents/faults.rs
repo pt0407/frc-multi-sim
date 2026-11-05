@@ -217,6 +217,7 @@ mod tests {
             match_time: 0.0,
             vision_pose: None,
             mech_angle: None,
+            hub_active: true,
         }
     }
 

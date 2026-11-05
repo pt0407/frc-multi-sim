@@ -46,6 +46,15 @@ pub struct SensorFrame {
     /// robot has no mechanism
     #[serde(default)]
     pub mech_angle: Option<f32>,
+    /// REBUILT hub shifts: is this robot's alliance hub scoring-active?
+    /// Always true outside teleop shifts (issue #10); agents use it to
+    /// time shots vs hold fuel.
+    #[serde(default = "default_true")]
+    pub hub_active: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 /// What an agent sends back. In a real adapter these are per-wheel/module
