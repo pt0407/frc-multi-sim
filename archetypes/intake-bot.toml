@@ -34,7 +34,7 @@ rotation_deg = [90.0, 0.0, 90.0]
 # `mech.target` (radians, clamped to `limits`). Deployed angle ≈ -0.6 sweeps
 # the bar down to floor level in front of the bumper to physically push
 # pieces; stow_angle keeps it up out of the way.
-[mech]
+[[mech]]
 pivot = [0.40, 0.35, 0.0]
 half_extents = [0.35, 0.03, 0.35]
 mass = 4.0
