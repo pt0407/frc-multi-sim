@@ -56,3 +56,4 @@ mod tests {
         matches!(back, AgentMsg::Actuator(_));
     }
 }
+pub mod nt_client_min;

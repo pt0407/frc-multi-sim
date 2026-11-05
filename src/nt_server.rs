@@ -177,7 +177,6 @@ impl NtServer {
                         .and_then(|h| h.to_str().ok())
                         .unwrap_or("")
                         .to_string();
-                    eprintln!("client offered subprotocols: {:?}", offered);
                     // echo the first offered token — we support the base NT4 protocol
                     if let Some(first) = offered.split(',').next() {
                         let first = first.trim();
@@ -268,7 +267,6 @@ impl NtServer {
                         let p = &m["params"];
                         match method {
                             "publish" => {
-                                eprintln!("PUBLISH msg: {}", p);
                                 let name = p["name"].as_str().unwrap_or("").to_string();
                                 let ty = p["type"].as_str().unwrap_or("double").to_string();
                                 let pubuid = p["pubuid"].as_i64().unwrap_or(0) as u32;
@@ -310,7 +308,6 @@ impl NtServer {
                                 let pubuid = arr[0].as_i64().unwrap_or(-1) as u32;
                                 let val = arr[3].clone();
                                 let mut st = state.lock().unwrap();
-                                eprintln!("frame pubuid={} known={:?} val={}", pubuid, my_pubs.get(&pubuid).is_some(), arr[3]);
                                 if let Some(&uid) = my_pubs.get(&pubuid) {
                                     // find topic by uid and update + rebroadcast
                                     let mut tname = None;

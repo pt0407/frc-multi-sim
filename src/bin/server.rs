@@ -2,9 +2,7 @@ use anyhow::Result;
 use clap::Parser;
 use futures_util::{SinkExt, StreamExt};
 use frc_sim_m0::{ActuatorFrame, AgentMsg, SensorFrame, ServerMsg};
-use nt_client::data::NetworkTableData;
-use nt_client::subscribe::ReceivedMessage;
-use nt_client::{Client, NewClientOptions, NTAddr};
+use frc_sim_m0::nt_client_min::NtClient;
 use rapier3d::prelude::*;
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
@@ -178,7 +176,8 @@ struct Args {
 
 /// NT4 bridge: orchestrator acts as an NT client to a robot's own NT server —
 /// the same topology as a real WPILib sim. Subscribes to actuator topics,
-/// publishes sensor topics.
+/// publishes sensor topics. Uses our minimal client (`nt_client` 0.5.1's
+/// GenericPublisher has a pubuid-latching bug, see issue #1).
 async fn nt_bridge(
     robot_id: usize,
     port: u16,
@@ -186,84 +185,51 @@ async fn nt_bridge(
     sensor_tx: tokio::sync::broadcast::Sender<(usize, SensorFrame)>,
 ) {
     loop {
-        let client = Client::new(NewClientOptions {
-            addr: NTAddr::Local,
-            unsecure_port: port,
-            secure_port: None,
-            name: format!("orchestrator-{robot_id}"),
-            ..Default::default()
-        });
-        let cmds = commands.clone();
-        let mut rx = sensor_tx.subscribe();
-        let res = client
-            .connect_setup(move |c| {
-                for (topic, which) in [
-                    ("/sim/cmd_fx", 0usize),
-                    ("/sim/cmd_fz", 1),
-                    ("/sim/cmd_torque", 2),
-                ] {
-                    let t = c.topic(topic);
-                    let cmds = cmds.clone();
-                    tokio::spawn(async move {
-                        let Ok(mut sub) = t.subscribe(Default::default()).await else {
-                            return;
-                        };
-                        while let Ok(msg) = sub.recv().await {
-                            if let ReceivedMessage::Updated((_, v)) = msg {
-                                let Some(f) = f64::from_value(v) else { continue };
-                                let mut g = cmds.lock().unwrap();
-                                let a = g[robot_id].get_or_insert(ActuatorFrame {
-                                    force: [0.0, 0.0],
-                                    torque: 0.0,
-                                });
-                                match which {
-                                    0 => a.force[0] = f as f32,
-                                    1 => a.force[1] = f as f32,
-                                    _ => a.torque = f as f32,
-                                }
-                            }
-                        }
-                    });
+        let Ok(client) = NtClient::connect(port).await else {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            continue;
+        };
+        println!("robot {} nt bridge connected -> :{}", robot_id, port);
+        for n in ["pose_x", "pose_z", "yaw", "vel_x", "vel_z", "contact"] {
+            client.publish(&format!("/sim/{n}"), 3);
+        }
+        // poll actuator topics into the command slot
+        {
+            let client = client.clone();
+            let commands = commands.clone();
+            tokio::spawn(async move {
+                loop {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                    let fx = client.get_f64("/sim/cmd_fx").unwrap_or(0.0) as f32;
+                    let fz = client.get_f64("/sim/cmd_fz").unwrap_or(0.0) as f32;
+                    let tq = client.get_f64("/sim/cmd_torque").unwrap_or(0.0) as f32;
+                    commands.lock().unwrap()[robot_id] =
+                        Some(ActuatorFrame { force: [fx, fz], torque: tq });
                 }
-                let names = ["pose_x", "pose_z", "yaw", "vel_x", "vel_z", "contact"];
-                let topics: Vec<_> = names.iter().map(|n| c.topic(format!("/sim/{n}"))).collect();
-                tokio::spawn(async move {
-                    let mut ps = Vec::new();
-                    // publish sequentially: nt_client's GenericPublisher accepts the
-                    // first announce carrying a pubuid, so concurrent publishes race
-                    for t in topics {
-                        match t.publish::<f64>(Default::default()).await {
-                            Ok(p) => ps.push(p),
-                            Err(e) => eprintln!("robot {} publish failed: {:?}", robot_id, e),
-                        }
-                    }
-                    eprintln!("robot {} nt publishers: {}", robot_id, ps.len());
-                    while let Ok((r, s)) = rx.recv().await {
-                        if r != robot_id {
-                            continue;
-                        }
-                        let [qx, qy, qz, qw] = s.rotation;
-                        let yaw = 2.0 * (qw * qy + qx * qz)
-                            .atan2(1.0 - 2.0 * (qy * qy + qx * qx));
-                        let vals = [
-                            s.position[0],
-                            s.position[2],
-                            yaw,
-                            s.linvel[0],
-                            s.linvel[2],
-                            s.contact_impulse,
-                        ];
-                        for (i, p) in ps.iter().enumerate() {
-                            if let Err(e) = p.set(vals[i] as f64).await {
-                                eprintln!("robot {} set[{}] err: {:?}", robot_id, i, e);
-                            }
-                        }
-                    }
-                });
-            })
-            .await;
-        eprintln!("nt bridge robot {} disconnected ({res:?}), retrying", robot_id);
-        tokio::time::sleep(Duration::from_secs(1)).await;
+            });
+        }
+        let mut rx = sensor_tx.subscribe();
+        while let Ok((r, s)) = rx.recv().await {
+            if !client.alive() {
+                break;
+            }
+            if r != robot_id {
+                continue;
+            }
+            let [qx, qy, qz, qw] = s.rotation;
+            let yaw = 2.0 * (qw * qy + qx * qz).atan2(1.0 - 2.0 * (qy * qy + qx * qx));
+            let vals = [
+                s.position[0], s.position[2], yaw,
+                s.linvel[0], s.linvel[2], s.contact_impulse,
+            ];
+            for (i, n) in ["pose_x", "pose_z", "yaw", "vel_x", "vel_z", "contact"]
+                .iter()
+                .enumerate()
+            {
+                client.set_f64(&format!("/sim/{n}"), vals[i] as f64);
+            }
+        }
+        eprintln!("robot {} nt bridge dropped, reconnecting", robot_id);
     }
 }
 
