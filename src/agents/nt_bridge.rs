@@ -40,6 +40,8 @@ pub async fn run(
                             force: [fx, fz],
                             torque: tq,
                             modules: None,
+                            intake_active: false,
+                            shoot: None,
                         },
                     );
                 }

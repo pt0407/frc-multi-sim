@@ -15,6 +15,11 @@ use std::path::Path;
 pub const FIELD_HALF_X: f32 = 8.25;
 pub const FIELD_HALF_Z: f32 = 4.0;
 
+/// FuelSim FIELD_COR (sqrt(22/51.5)). Field surfaces use this via the
+/// `Min` restitution combine rule: fuel-fuel keeps FUEL_COR while
+/// fuel-field bounces use FIELD_COR.
+pub const FIELD_COR: f32 = 0.6537;
+
 fn default_ground_friction() -> f32 {
     1.0
 }
@@ -311,6 +316,7 @@ pub fn build_arena(
             .translation(vector![g.pos[0], g.pos[1], g.pos[2]])
             .friction(g.friction)
             .restitution(g.restitution)
+            .restitution_combine_rule(CoefficientCombineRule::Min)
             .build(),
         ground,
         bodies,
@@ -321,6 +327,7 @@ pub fn build_arena(
                 .translation(vector![w.pos[0], w.pos[1], w.pos[2]])
                 .friction(w.friction)
                 .restitution(w.restitution)
+                .restitution_combine_rule(CoefficientCombineRule::Min)
                 .build(),
             ground,
             bodies,

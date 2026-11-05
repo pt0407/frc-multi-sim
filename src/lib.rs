@@ -13,5 +13,5 @@ pub mod viz;
 pub mod world;
 
 pub use protocol::{
-    ActuatorFrame, AgentMsg, SensorFrame, ServerMsg, PROTOCOL_VERSION,
+    ActuatorFrame, AgentMsg, SensorFrame, ServerMsg, ShotCommand, PROTOCOL_VERSION,
 };

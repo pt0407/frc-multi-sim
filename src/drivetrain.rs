@@ -296,6 +296,8 @@ mod tests {
             force: [1200.0, -300.0],
             torque: 5.0,
             modules: None,
+            intake_active: false,
+            shoot: None,
         };
         let out = d.resolve(&cmd, 0.7);
         assert_eq!(out.len(), 1);
@@ -312,6 +314,8 @@ mod tests {
             force: [100.0, 0.0],
             torque: 4.0,
             modules: None,
+            intake_active: false,
+            shoot: None,
         };
         let out = d.resolve(&cmd, 0.0);
         assert_eq!(out.len(), 4);
@@ -335,6 +339,8 @@ mod tests {
             force: [2400.0, 0.0],
             torque: 0.0,
             modules: None,
+            intake_active: false,
+            shoot: None,
         };
         let out = d.resolve(&cmd, 0.0);
         let total: f32 = out
@@ -357,6 +363,8 @@ mod tests {
                 ModuleCommand { steer: std::f32::consts::FRAC_PI_2, force: 50.0 };
                 4
             ]),
+            intake_active: false,
+            shoot: None,
         };
         let out = d.resolve(&cmd, std::f32::consts::FRAC_PI_2);
         for f in &out {

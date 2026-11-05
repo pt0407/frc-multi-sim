@@ -26,6 +26,9 @@ struct Args {
     /// REBUILT-flavored layout; omit to use it, or pass another file.
     #[arg(long)]
     field: Option<std::path::PathBuf>,
+    /// Game-piece spawn/scoring table TOML (issue #3)
+    #[arg(long)]
+    pieces: Option<std::path::PathBuf>,
     /// Physics pacing mode
     #[arg(long, value_enum, default_value_t = TimeMode::Realtime)]
     time_mode: TimeMode,
@@ -113,6 +116,7 @@ async fn main() -> Result<()> {
             let p = std::path::PathBuf::from("fields/rebuilt.toml");
             p.exists().then_some(p)
         }),
+        pieces: args.pieces.clone(),
         record: args.record.clone(),
         replay: args.replay.clone(),
         diff: args.diff.clone(),
@@ -134,7 +138,8 @@ async fn main() -> Result<()> {
         field.walls.len(),
         field.obstacles.len()
     );
-    let mut world = World::with_field(&specs, field.clone(), cfg.seed);
+    let piece_table = cfg.piece_table();
+    let mut world = World::with_config(&specs, cfg.seed, field.clone(), &piece_table);
 
     // optional event log: header first, then per-tick records in the loop
     let mut log = match &cfg.record {
@@ -147,6 +152,7 @@ async fn main() -> Result<()> {
                     &field,
                 ),
                 specs: specs.clone(),
+                pieces: Some(piece_table.clone()),
             };
             println!("recording event log -> {}", path.display());
             Some(LogWriter::create(path, &header)?)
@@ -156,9 +162,14 @@ async fn main() -> Result<()> {
 
     let commands = Arc::new(CommandSlots::new(num_robots));
     let (sensor_tx, _) = tokio::sync::broadcast::channel::<(usize, SensorFrame)>(256);
+    let (world_tx, _) = tokio::sync::broadcast::channel::<frc_sim_m0::viz::VizFrame>(64);
 
     // spectator world-state stream for the web viz (port 9771)
-    tokio::spawn(frc_sim_m0::viz::run(sensor_tx.clone(), field.clone()));
+    tokio::spawn(frc_sim_m0::viz::run(
+        sensor_tx.clone(),
+        world_tx.clone(),
+        field.clone(),
+    ));
 
     // AdvantageScope-compatible NT4 debug publisher (issue #22)
     if let Some(port) = args.debug_nt {
@@ -253,6 +264,14 @@ async fn main() -> Result<()> {
                         }
                         let _ = sensor_tx.send((r, frame));
                     }
+                    // spectator piece/score stream (~50 Hz source; the viz
+                    // republishes at 30 Hz)
+                    let _ = world_tx.send(frc_sim_m0::viz::VizFrame {
+                        tick,
+                        pieces: world.piece_positions(),
+                        scores: world.scores,
+                        held: world.held.clone(),
+                    });
                     // periodic flush so a killed server loses at most ~1 s
                     if tick % PHYSICS_HZ as u64 == 0 {
                         if let Some(w) = log.as_mut() {

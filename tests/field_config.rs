@@ -2,6 +2,7 @@
 //! validates, and produces the expected collider set; malformed configs
 //! fail loudly at load.
 use frc_sim_m0::world::chassis;
+use frc_sim_m0::world::pieces::PieceTable;
 use frc_sim_m0::world::field::{build_arena, FieldSpec};
 use frc_sim_m0::world::World;
 use rapier3d::prelude::{ColliderSet, RigidBodySet};
@@ -35,7 +36,7 @@ fn world_from_field_spec_has_field_plus_robot_colliders() {
     let specs = chassis::default_specs();
     let n_robots = specs.len();
     let field_colliders = spec.collider_count();
-    let world = World::with_field(&specs, spec, 0);
+    let world = World::with_config(&specs, 0, spec, &PieceTable::default());
     // expose the spec through the world so viz/hash callers can read it
     assert_eq!(world.field.walls.len(), 4);
     drop((n_robots, field_colliders, world));

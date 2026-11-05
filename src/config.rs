@@ -2,6 +2,7 @@
 //! record/replay paths. Resolves CLI inputs into the `RobotSpec` table the
 //! world is built from, and the config hash stored in replay headers.
 use crate::archetype::Archetype;
+use crate::world::pieces::PieceTable;
 use crate::world::chassis::{self, RobotSpec, NUM_ROBOTS};
 use crate::world::field::FieldSpec;
 use clap::ValueEnum;
@@ -33,6 +34,8 @@ pub struct SimConfig {
     pub archetypes: Vec<PathBuf>,
     /// field layout TOML (issue #14); `None` -> built-in default layout
     pub field: Option<PathBuf>,
+    /// game-piece spawn/scoring table TOML (issue #3); None = empty field
+    pub pieces: Option<PathBuf>,
     /// write an event log here (record mode)
     pub record: Option<PathBuf>,
     /// re-run this log headless (replay mode)
@@ -88,8 +91,35 @@ impl SimConfig {
             for v in s.spawn {
                 v.to_bits().hash(&mut h);
             }
+            if let Some(i) = s.intake {
+                for v in [i.x_min, i.x_max, i.z_min, i.z_max, i.y_min, i.y_max] {
+                    v.to_bits().hash(&mut h);
+                }
+            }
         }
         h.finish()
+    }
+
+    /// Load the piece spawn/scoring table (or an empty one when unset).
+    pub fn piece_table(&self) -> PieceTable {
+        match &self.pieces {
+            Some(p) => match PieceTable::load(p) {
+                Ok(t) => {
+                    println!(
+                        "piece table {:?}: {} pieces, {} hubs",
+                        p,
+                        t.piece_count(),
+                        t.hubs.len()
+                    );
+                    t
+                }
+                Err(e) => {
+                    eprintln!("failed to load piece table {}: {e:#}", p.display());
+                    PieceTable::default()
+                }
+            },
+            None => PieceTable::default(),
+        }
     }
 
     /// Hash raw archetype file contents too, so config edits that don't
@@ -97,7 +127,7 @@ impl SimConfig {
     pub fn hash_archetype_files(&self, mut h: u64) -> u64 {
         let mut hasher = DefaultHasher::new();
         hasher.write_u64(h);
-        for p in &self.archetypes {
+        for p in self.archetypes.iter().chain(self.pieces.iter()) {
             if let Ok(bytes) = std::fs::read(p) {
                 hasher.write(&bytes);
             }
