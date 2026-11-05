@@ -9,21 +9,26 @@ the design rationale and `PLAN.md`'s dependency graph for ordering constraints.
 
 ---
 
-## Status snapshot (2026-11-05)
+## Status snapshot (2026-11-05, updated)
 
-**Landed:** A1 determinism/replay (#5) + A4 refactor (#21) via PR #34 ·
-#2 traction model · #3 game pieces + scoring · #4 web viz · #7 sensor noise ·
-#8 archetypes · #9 CI · #10 match state machine · #14 field config ·
-#22 AdvantageScope publishing · trajectory agent (PR #41, open).
+**Landed:** A1 determinism/replay + A4 refactor (#34) · traction model (#18) ·
+game pieces + scoring (#37) · web viz + real 2026 field GLB (#19, #55) ·
+sensor noise/vision (#39) · archetypes + per-game configs (#20, #51) ·
+CI + headless goldens (#17) · match state machine (#38) · NT debug pub (#35) ·
+trajectory (#41), strategy (#59) + gamepad (#51) agents · 6-robot scale (#45) ·
+fault injection (#54) · headless sim bin + proto replay (#49) ·
+RL obs/policy/experience scaffold (#50) · rolling-resistance fix +
+constants audit (#48) · agent bug batch (#46) · mech articulation spike +
+v2 gaps (#58, mech_angle/NT/viz/intake-gating) · robot GLB pipeline (#56) ·
+M4 replay-tuning scaffold (`tune` binary, #25 partial).
 
 **Open, plan-relevant:** #6 WPILib adapter `[blocked: JDK+Gradle]` ·
-#11 scale to 6 robots · #12 RL obs/actor · #13 gamepad agent ·
-#26–29 bug reports (NT bridge leak, contact_impulse, drive panic, robustness) ·
-#30–33 ideas (headless sim bin, AgentMsg replay, fault injection, match-state API) ·
-#40 chassis friction bug · #42 real field import · #43 robot CAD pipeline ·
-#44 physics-constants alignment · #23 per-game configs · #24 WASM · #25 M4 validation.
+#33 match-state override API `[other agent in-flight]` ·
+#24 WASM build `[deprioritized]` · #25 M4 AdvantageKit tuning
+`[scaffold done; needs real logs]` · #43 v2 mechanism articulation `[spike
+landed; full scope open]`.
 
-**Duplicates still open:** #15, #16 (close when convenient).
+**Duplicates still open:** none (#15/#16 closed).
 
 ---
 
