@@ -42,6 +42,11 @@ struct Args {
     /// Divergence tolerance in meters (0 = bitwise)
     #[arg(long, default_value_t = 0.0)]
     diff_tol: f32,
+    /// Run an NT4 debug server on this port republishing all robots' world
+    /// state under /Sim/* so AdvantageScope can connect (avoids the robot
+    /// bridge ports 5810/5820)
+    #[arg(long)]
+    debug_nt: Option<u16>,
 }
 
 fn run_replay(cfg: &SimConfig) -> Result<()> {
@@ -135,6 +140,16 @@ async fn main() -> Result<()> {
 
     // spectator world-state stream for the web viz (port 9771)
     tokio::spawn(frc_sim_m0::viz::run(sensor_tx.clone()));
+
+    // AdvantageScope-compatible NT4 debug publisher (issue #22)
+    if let Some(port) = args.debug_nt {
+        let tx = sensor_tx.clone();
+        tokio::spawn(async move {
+            if let Err(e) = frc_sim_m0::debug_nt::run(tx, port).await {
+                eprintln!("debug NT server failed: {e}");
+            }
+        });
+    }
 
     for (robot_id, port) in cfg.nt_ports.iter().enumerate() {
         if robot_id >= num_robots {
