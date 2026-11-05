@@ -230,6 +230,7 @@ async fn main() -> Result<()> {
     );
     let mut world = World::with_config(&specs, cfg.seed, field.clone(), &piece_table);
     world.match_clock = frc_sim_m0::r#match::MatchClock::new(match_cfg);
+    world.apply_preload();
     // shared with the control channel (issue #33); the physics loop locks
     // it briefly each step — step() is fully synchronous
     let world = Arc::new(std::sync::Mutex::new(world));
@@ -245,6 +246,7 @@ async fn main() -> Result<()> {
             move || {
                 let mut w = World::with_config(&specs, seed, field.clone(), &piece_table);
                 w.match_clock = frc_sim_m0::r#match::MatchClock::new(match_cfg);
+                w.apply_preload();
                 w
             }
         })),

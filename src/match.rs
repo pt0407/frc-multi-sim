@@ -109,6 +109,9 @@ pub struct MatchConfig {
     /// The auto winner's hub goes first; 0 = both hubs always active.
     #[serde(default)]
     pub shift_s: f32,
+    /// fuel each robot starts holding (game manual 6.3.4, up to 8)
+    #[serde(default)]
+    pub preload_fuel: u32,
 }
 
 impl Default for MatchConfig {
@@ -121,6 +124,7 @@ impl Default for MatchConfig {
             climb_bonus_points: 10,
             climb_radius_m: 1.0,
             shift_s: 0.0,
+            preload_fuel: 0,
         }
     }
 }

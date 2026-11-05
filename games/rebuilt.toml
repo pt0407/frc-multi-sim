@@ -24,6 +24,8 @@ endgame_s           = 30.0
 # REBUILT hub shifts: each alliance's hub is scoring-active for 20 s
 # windows alternating through teleop (game manual)
 shift_s             = 20.0
+# game manual 6.3.4: robots may preload up to 8 fuel each
+preload_fuel        = 8
 # placeholder climb rule: robots within climb_radius_m (horizontal) of a
 # field climb point at match completion bank this bonus for their alliance
 climb_bonus_points  = 10

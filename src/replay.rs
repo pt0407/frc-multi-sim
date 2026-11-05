@@ -444,6 +444,7 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
                     climb_bonus_points: c,
                     climb_radius_m: rad,
                     shift_s: 0.0,
+                    preload_fuel: 0,
                 })
             } else {
                 None
@@ -591,6 +592,7 @@ pub fn replay(header: &LogHeader, records: &[Record]) -> Vec<(u64, u32, StateSam
     // keep the default clock
     if let Some(m) = header.match_cfg {
         world.match_clock = crate::r#match::MatchClock::new(m);
+        world.apply_preload();
     }
     let n = world.num_robots();
     let mut cmds: Vec<Option<ActuatorFrame>> = vec![None; n];

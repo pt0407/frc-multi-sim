@@ -587,6 +587,15 @@ impl World {
 
     /// Arm joint angle for mechanism telemetry/tests (issue #57 spike).
     /// `None` when the robot has no `[mech]`.
+    /// Stage preloaded fuel (game manual 6.3.4): each robot starts
+    /// holding `preload_fuel` pieces.
+    pub fn apply_preload(&mut self) {
+        let n = self.match_clock.config.preload_fuel;
+        for h in &mut self.held {
+            *h = n;
+        }
+    }
+
     /// Set drivetrain wheel-carpet mu for every robot (M4 tuning knob —
     /// the parameter that actually moves trajectories post-#48).
     pub fn set_drivetrain_mu(&mut self, mu: f32) {

@@ -34,6 +34,7 @@ fn quick_match() -> MatchConfig {
         climb_bonus_points: 10,
         climb_radius_m: 1.0,
         shift_s: 0.0,
+        preload_fuel: 0,
     }
 }
 
@@ -163,6 +164,7 @@ fn scoring_is_attributed_to_phase_and_climb_bonus_lands() {
         climb_bonus_points: 10,
         climb_radius_m: 1.5,
         shift_s: 0.0,
+        preload_fuel: 0,
     };
     let mut w = World::with_config(&chassis::default_specs(), SEED, field, &table);
     w.match_clock = MatchClock::new(cfg);
