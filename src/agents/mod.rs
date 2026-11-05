@@ -75,6 +75,18 @@ impl CommandSlots {
         self.inner.lock().unwrap().slots[robot].ws_connected = connected;
     }
 
+    /// Atomically claim the WS agent slot for `robot`: returns false if a
+    /// live WS agent already owns it (issue #29 — duplicate Hello takeover).
+    pub fn claim_ws(&self, robot: usize) -> bool {
+        let mut g = self.inner.lock().unwrap();
+        let s = &mut g.slots[robot];
+        if s.ws_connected {
+            return false;
+        }
+        s.ws_connected = true;
+        true
+    }
+
     /// Robots with a live WS agent — these are the ones the `lockstep`
     /// barrier waits on. NT-bridged robots free-run (their poller writes
     /// continuously, so gating on them would deadlock).

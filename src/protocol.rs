@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 /// Bump on any breaking change to `AgentMsg`/`ServerMsg` or the
 /// `SensorFrame`/`ActuatorFrame` payload contracts.
-pub const PROTOCOL_VERSION: u32 = 1;
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// What the orchestrator sends to each agent every agent-tick.
 /// Mirrors what a WPILib robot would observe: its own filtered state only.
@@ -21,8 +21,9 @@ pub struct SensorFrame {
     pub linvel: [f32; 3],
     /// world-frame angular velocity (gyro)
     pub angvel: [f32; 3],
-    /// contact-normal force magnitudes felt this tick (bumper hits)
-    pub contact_impulse: f32,
+    /// number of contact-manifold points shared with other robots this tick
+    /// (issue #27: this is a contact *count*, not an impulse magnitude)
+    pub contact_points: f32,
     /// game pieces currently held by this robot (issue #3)
     #[serde(default)]
     pub pieces_held: u32,

@@ -41,7 +41,7 @@ interface StateMsg {
     position: [number, number, number];
     rotation: [number, number, number, number];
     linvel: [number, number, number];
-    contact_impulse: number;
+    contact_points: number;
   }[];
 }
 type Msg = ConfigMsg | StateMsg;
@@ -157,7 +157,7 @@ function connect() {
       const speed = Math.hypot(r.linvel[0], r.linvel[2]).toFixed(2);
       lines.push(
         `r${r.id} pos(${r.position[0].toFixed(2)}, ${r.position[2].toFixed(2)}) v=${speed} m/s` +
-          (r.contact_impulse > 0 ? ` contact=${r.contact_impulse}` : ""),
+          (r.contact_points > 0 ? ` contact=${r.contact_points}` : ""),
       );
     }
     hud.textContent = lines.join("\n");

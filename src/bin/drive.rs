@@ -12,7 +12,7 @@ struct Args {
     #[arg(long)]
     robot_id: usize,
     /// waypoint [x,z] the simple P-controller drives toward
-    #[arg(long, num_args = 2, allow_hyphen_values = true)]
+    #[arg(long, num_args = 2, required = true, allow_hyphen_values = true)]
     target: Vec<f32>,
     /// hold position after reaching waypoint (plays defense)
     #[arg(long, default_value_t = false)]
@@ -83,7 +83,7 @@ async fn main() -> Result<()> {
             (fx, fz)
         };
 
-        if s.contact_impulse > 0.0 {
+        if s.contact_points > 0.0 {
             println!(
                 "robot {} tick {}: CONTACT pos=({:.2},{:.2}) vel={:.2}",
                 args.robot_id, s.tick, s.position[0], s.position[2],

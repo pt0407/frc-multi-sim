@@ -76,7 +76,17 @@ async fn handle_conn(
         _ => return,
     };
     println!("agent {} connected -> robot {}", addr, robot_id);
-    commands.set_ws_connected(robot_id, true);
+    if !commands.claim_ws(robot_id) {
+        // issue #29: a second agent must not silently steal the command slot
+        let err = ServerMsg::Error {
+            message: format!("robot_id {robot_id} already has a connected agent"),
+        };
+        eprintln!("agent {addr} rejected: {err:?}");
+        let _ = sink
+            .send(Message::Text(serde_json::to_string(&err).unwrap().into()))
+            .await;
+        return;
+    }
     sink.send(Message::Text(
         serde_json::to_string(&ServerMsg::Welcome {
             robot_id,

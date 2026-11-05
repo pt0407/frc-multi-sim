@@ -111,7 +111,7 @@ async fn state_collector(
                             "rotation": f.rotation,
                             "linvel": f.linvel,
                             "angvel": f.angvel,
-                            "contact_impulse": f.contact_impulse,
+                            "contact_points": f.contact_points,
                         })
                     })
                     .collect();

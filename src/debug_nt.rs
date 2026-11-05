@@ -129,7 +129,7 @@ pub async fn run(
                     );
                     server.set(
                         &format!("{base}/Contact"),
-                        rmpv::Value::from(f.contact_impulse as f64),
+                        rmpv::Value::from(f.contact_points as f64),
                     );
                 }
                 server.set("/Sim/Tick", rmpv::Value::from(tick as i64));

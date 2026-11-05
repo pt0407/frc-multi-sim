@@ -395,7 +395,7 @@ impl World {
         let av = body.angvel();
         // robot-vs-robot contacts only (filter out ground/walls);
         // aggregated across every other chassis
-        let contact_impulse: f32 = self
+        let contact_points: f32 = self
             .chassis_colliders
             .iter()
             .enumerate()
@@ -414,7 +414,7 @@ impl World {
             rotation: [r.i, r.j, r.k, r.w],
             linvel: [lv.x, lv.y, lv.z],
             angvel: [av.x, av.y, av.z],
-            contact_impulse,
+            contact_points,
             pieces_held: self.held[robot],
             score: self.scores[robot % self.scores.len()],
             match_state: self.match_clock.phase_at(tick),

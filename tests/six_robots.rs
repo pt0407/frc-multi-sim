@@ -90,7 +90,7 @@ fn six_robots_have_independent_sensor_streams() {
 }
 
 #[test]
-fn contact_impulse_aggregates_all_other_robots() {
+fn contact_points_aggregates_all_other_robots() {
     // robot 0 sandwiched between robots 1 and 2, both pressing inward;
     // its contact impulse must aggregate manifolds vs BOTH neighbors,
     // and isolated robot 3 must contribute nothing
@@ -114,8 +114,8 @@ fn contact_impulse_aggregates_all_other_robots() {
     let mut max3 = 0.0f32;
     for _ in 0..400 {
         w.step(&cmds);
-        max0 = max0.max(w.sensor_frame(0, 0).contact_impulse);
-        max3 = max3.max(w.sensor_frame(3, 0).contact_impulse);
+        max0 = max0.max(w.sensor_frame(0, 0).contact_points);
+        max3 = max3.max(w.sensor_frame(3, 0).contact_points);
     }
     assert!(max0 > 0.0, "robot 0 should feel its neighbors, got {max0}");
     assert_eq!(max3, 0.0, "isolated robot 3 should feel nothing, got {max3}");
