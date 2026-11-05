@@ -73,6 +73,10 @@ struct Args {
     /// experience log. Combine with `--time-mode fast` for rollouts.
     #[arg(long)]
     policy: Vec<usize>,
+    /// Fault-injection TOML (issue #32): per-robot-slot loss/latency/
+    /// jitter/disconnect rules on agent links — `[[faults.link]]` tables.
+    #[arg(long)]
+    faults: Option<std::path::PathBuf>,
     /// Experience log path for --policy agents (JSONL; default
     /// experiences.jsonl, only opened when at least one --policy is set)
     #[arg(long)]
@@ -256,6 +260,17 @@ async fn main() -> Result<()> {
 
     let commands = Arc::new(CommandSlots::new(num_robots));
 
+    // seeded per-link fault injectors (issue #32); shared by the WS server
+    // and NT bridge tasks below
+    let faults = match &args.faults {
+        Some(path) => Some(Arc::new(agents::faults::Faults::load(
+            path,
+            num_robots,
+            cfg.seed,
+        )?)),
+        None => None,
+    };
+
     // in-process RL policy agents (issue #12): these slots are owned by
     // PolicyAgents running inside the physics loop — obs is built from
     // each robot's filtered SensorFrame + the shared ObsWorld snapshot,
@@ -321,6 +336,7 @@ async fn main() -> Result<()> {
             commands.clone(),
             sensor_tx.clone(),
             proto_log.clone(),
+            faults.clone(),
         ));
         println!("nt bridge for robot {} -> :{}", robot_id, port);
     }
@@ -454,5 +470,5 @@ async fn main() -> Result<()> {
 
     let listener = TcpListener::bind("127.0.0.1:9770").await?;
     println!("orchestrator listening on ws://127.0.0.1:9770/robot/<id>");
-    agents::ws::serve(listener, num_robots, commands, sensor_tx, proto_log).await
+    agents::ws::serve(listener, num_robots, commands, sensor_tx, proto_log, faults).await
 }

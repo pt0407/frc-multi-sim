@@ -1,0 +1,15 @@
+# Seeded fault injection on agent links (issue #32).
+# Run: cargo run --bin server -- --faults faults/example.toml
+# Every field is optional per link; multiple [[faults.link]] tables allowed.
+[faults]
+
+[[faults.link]]
+robot = 0                  # robot slot this rule applies to
+loss = 0.25                # drop probability for commands AND sensor frames
+latency_ticks = 2          # sensor frames held this many agent ticks
+jitter_ticks = 3           # + uniform(0..=3) extra ticks
+
+[[faults.link]]
+robot = 1
+disconnect_period_ticks = 500   # every 500 ticks...
+disconnect_ticks = 25           # ...link is dead for 25 ticks

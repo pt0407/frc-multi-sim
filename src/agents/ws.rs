@@ -2,6 +2,7 @@
 //! handshakes with protocol-version enforcement (PLAN §0), streams each
 //! agent its own `SensorFrame`s, and writes incoming `ActuatorFrame`s into
 //! the shared command slots.
+use crate::agents::faults::Faults;
 use crate::agents::proto_log::{Dir, ProtoLog};
 use crate::agents::CommandSlots;
 use crate::{AgentMsg, SensorFrame, ServerMsg, PROTOCOL_VERSION};
@@ -18,14 +19,16 @@ pub async fn serve(
     commands: Arc<CommandSlots>,
     sensor_tx: broadcast::Sender<(usize, SensorFrame)>,
     proto: Option<Arc<ProtoLog>>,
+    faults: Option<Arc<Faults>>,
 ) -> anyhow::Result<()> {
     loop {
         let (stream, addr) = listener.accept().await?;
         let commands = commands.clone();
         let sensor_rx = sensor_tx.subscribe();
         let proto = proto.clone();
+        let faults = faults.clone();
         tokio::spawn(async move {
-            handle_conn(stream, addr, num_robots, commands, sensor_rx, proto).await;
+            handle_conn(stream, addr, num_robots, commands, sensor_rx, proto, faults).await;
         });
     }
 }
@@ -37,6 +40,7 @@ async fn handle_conn(
     commands: Arc<CommandSlots>,
     mut sensor_rx: broadcast::Receiver<(usize, SensorFrame)>,
     proto: Option<Arc<ProtoLog>>,
+    faults: Option<Arc<Faults>>,
 ) {
     let Ok(ws) = tokio_tungstenite::accept_async(stream).await else {
         return;
@@ -129,8 +133,12 @@ async fn handle_conn(
     .await
     .ok();
 
+    // issue #32: per-link fault injector (None unless --faults covers this slot)
+    let injector = faults.as_ref().and_then(|f| f.get(robot_id));
+
     let cmd_writer = commands.clone();
     let read_proto = proto.clone();
+    let read_inj = injector.clone();
     let read_task = tokio::spawn(async move {
         while let Some(Ok(msg)) = stream.next().await {
             if let Message::Text(txt) = msg {
@@ -140,6 +148,13 @@ async fn handle_conn(
                             p.log(robot_id, Dir::In, &m);
                         }
                         if let AgentMsg::Actuator(a) = m {
+                            // fault injection: loss/disconnect bursts drop
+                            // inbound commands before they reach the slot
+                            if let Some(inj) = &read_inj {
+                                if !inj.lock().unwrap().allow_inbound() {
+                                    continue;
+                                }
+                            }
                             cmd_writer.set(robot_id, a);
                         }
                     }
@@ -154,9 +169,19 @@ async fn handle_conn(
         }
     });
 
-    loop {
+    'send: loop {
         match sensor_rx.recv().await {
             Ok((r, frame)) if r == robot_id => {
+                let frames = match &injector {
+                    Some(inj) => {
+                        let mut g = inj.lock().unwrap();
+                        let t = frame.tick;
+                        g.outbound(t, frame);
+                        g.drain_due(t)
+                    }
+                    None => vec![frame],
+                };
+                for frame in frames {
                 let out = ServerMsg::Sensor(frame);
                 if let Some(p) = &proto {
                     // stamp with the frame's own tick, not the loop's
@@ -167,7 +192,8 @@ async fn handle_conn(
                 }
                 let txt = serde_json::to_string(&out).unwrap();
                 if sink.send(Message::Text(txt.into())).await.is_err() {
-                    break;
+                    break 'send;
+                }
                 }
             }
             Ok(_) => continue,

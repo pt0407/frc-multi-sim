@@ -1,5 +1,6 @@
 //! Agent-facing services: WS protocol server, NT4 bridge, and the shared
 //! per-robot command slots they write into (PLAN A4).
+pub mod faults;
 pub mod nt_bridge;
 pub mod policy;
 pub mod proto_log;

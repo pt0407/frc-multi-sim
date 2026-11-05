@@ -3,6 +3,7 @@
 //! topics, publishes sensor topics. Uses our minimal client
 //! (`nt_client` 0.5.1's GenericPublisher has a pubuid-latching bug, see
 //! issue #1).
+use crate::agents::faults::Faults;
 use crate::agents::proto_log::{Dir, ProtoLog};
 use crate::agents::CommandSlots;
 use crate::nt_client_min::NtClient;
@@ -20,7 +21,10 @@ pub async fn run(
     commands: Arc<CommandSlots>,
     sensor_tx: tokio::sync::broadcast::Sender<(usize, SensorFrame)>,
     proto: Option<Arc<ProtoLog>>,
+    faults: Option<Arc<Faults>>,
 ) {
+    // issue #32: per-link fault injector (None unless --faults covers this slot)
+    let injector = faults.as_ref().and_then(|f| f.get(robot_id));
     let mut failures: u32 = 0;
     loop {
         let client = match NtClient::connect(port).await {
@@ -53,6 +57,7 @@ pub async fn run(
             let client = client.clone();
             let commands = commands.clone();
             let proto = proto.clone();
+            let injector = injector.clone();
             tokio::spawn(async move {
                 let mut last: Option<ActuatorFrame> = None;
                 loop {
@@ -78,6 +83,13 @@ pub async fn run(
                         }
                     }
                     last = Some(cmd.clone());
+                    // fault injection: loss/disconnect bursts drop inbound
+                    // commands before they reach the slot
+                    if let Some(inj) = &injector {
+                        if !inj.lock().unwrap().allow_inbound() {
+                            continue;
+                        }
+                    }
                     commands.set(robot_id, cmd);
                 }
             })
@@ -90,6 +102,15 @@ pub async fn run(
             if r != robot_id {
                 continue;
             }
+            let frames = match &injector {
+                Some(inj) => {
+                    let mut g = inj.lock().unwrap();
+                    g.outbound(s.tick, s.clone());
+                    g.drain_due(s.tick)
+                }
+                None => vec![s.clone()],
+            };
+            for s in frames {
             let [qx, qy, qz, qw] = s.rotation;
             let yaw = 2.0 * (qw * qy + qx * qz).atan2(1.0 - 2.0 * (qy * qy + qx * qx));
             let vals = [
@@ -110,6 +131,7 @@ pub async fn run(
             // writes above are its wire encoding, issue #31)
             if let Some(p) = &proto {
                 p.log_at(s.tick, robot_id, Dir::Out, &ServerMsg::Sensor(s.clone()));
+            }
             }
         }
         // connection dropped: kill the poller and clear the command slot,
