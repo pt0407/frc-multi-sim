@@ -3,3 +3,4 @@ web/node_modules
 web/dist
 web/public/field-assets
 web/public/robot-assets
+experiences.jsonl
