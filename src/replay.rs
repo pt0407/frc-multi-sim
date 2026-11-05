@@ -443,6 +443,7 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
                     endgame_s: e,
                     climb_bonus_points: c,
                     climb_radius_m: rad,
+                    shift_s: 0.0,
                 })
             } else {
                 None

@@ -104,6 +104,11 @@ pub struct MatchConfig {
     pub climb_bonus_points: u32,
     /// horizontal distance to a climb point that counts as "climbed"
     pub climb_radius_m: f32,
+    /// REBUILT hub-shift window in teleop (issue: real-match sim): each
+    /// alliance's hub is active for `shift_s` seconds at a time, alternating.
+    /// The auto winner's hub goes first; 0 = both hubs always active.
+    #[serde(default)]
+    pub shift_s: f32,
 }
 
 impl Default for MatchConfig {
@@ -115,6 +120,7 @@ impl Default for MatchConfig {
             endgame_s: 30.0,
             climb_bonus_points: 10,
             climb_radius_m: 1.0,
+            shift_s: 0.0,
         }
     }
 }
@@ -235,6 +241,24 @@ impl MatchClock {
         } else {
             MatchPhase::Complete
         }
+    }
+
+    /// Is `alliance`'s hub scoring-active at `tick`? (REBUILT hub shifts:
+    /// teleop alternates active windows; auto/endgame/complete = both on.)
+    pub fn hub_active(&self, alliance: usize, tick: u64) -> bool {
+        if self.config.shift_s <= 0.0 {
+            return true;
+        }
+        if self.phase_at(tick) != MatchPhase::Teleop {
+            return true;
+        }
+        let b = self.config.bounds();
+        let t = tick as f32 / TICK_HZ;
+        let teleop_t = t - b[1]; // seconds into teleop
+        let window = (teleop_t / self.config.shift_s) as usize;
+        // alliance 0 active in even windows (auto winner picks first window
+        // in the real game; deterministic default here)
+        (window % 2 == 0) == (alliance == 0)
     }
 
     /// Seconds remaining in the phase at `tick` (0.0 once complete).

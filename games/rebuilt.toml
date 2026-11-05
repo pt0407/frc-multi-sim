@@ -21,6 +21,9 @@ disabled_s          = 0.0
 auto_s              = 20.0
 teleop_s            = 110.0
 endgame_s           = 30.0
+# REBUILT hub shifts: each alliance's hub is scoring-active for 20 s
+# windows alternating through teleop (game manual)
+shift_s             = 20.0
 # placeholder climb rule: robots within climb_radius_m (horizontal) of a
 # field climb point at match completion bank this bonus for their alliance
 climb_bonus_points  = 10

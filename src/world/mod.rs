@@ -559,6 +559,11 @@ impl World {
                 .find(|hub| pieces::hub_scores(hub, &pos, &[v.x, v.y, v.z]))
             {
                 let a = (hub.alliance as usize).min(self.scores.len() - 1);
+                // REBUILT hub shifts: a hub only scores while its alliance's
+                // window is active (always active when shift_s == 0)
+                if !self.match_clock.hub_active(a, self.tick) {
+                    continue;
+                }
                 self.scores[a] += 1;
                 self.score_by_phase[a].add(phase, 1);
                 remove.push(pi);
