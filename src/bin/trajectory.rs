@@ -27,7 +27,7 @@ struct Args {
     #[arg(long, default_value_t = 0.6)]
     lookahead: f32,
     /// waypoint reached threshold (m)
-    #[arg(long, default_value_t = 0.2)]
+    #[arg(long, default_value_t = 0.3)]
     arrive: f32,
     /// max drive force (N)
     #[arg(long, default_value_t = 1200.0)]
@@ -162,7 +162,7 @@ async fn main() -> Result<()> {
                 let [gx, gz] = path[path.len() - 1];
                 let ex = gx - pos[0];
                 let ez = gz - pos[1];
-                let (mut fx, mut fz) = (300.0 * ex - 60.0 * vel[0], 300.0 * ez - 60.0 * vel[1]);
+                let (mut fx, mut fz) = (800.0 * ex - 80.0 * vel[0], 800.0 * ez - 80.0 * vel[1]);
                 let mag = (fx * fx + fz * fz).sqrt();
                 if mag > max_force {
                     fx *= max_force / mag;
@@ -196,16 +196,18 @@ async fn main() -> Result<()> {
 
         let target = pursuit_point(&path, pos, args.lookahead);
 
-        // PD toward pursuit point, damped by velocity
+        // Bang-bang drive: full force toward the pursuit point. A PD
+        // regulator stalls on this sim's chassis ground friction (~530 N
+        // breakaway for a 60 kg box) — real robots roll, this box scrapes,
+        // so commands must exceed the breakaway force to move at all.
         let ex = target[0] - pos[0];
         let ez = target[1] - pos[1];
-        let mut fx = 300.0 * ex - 60.0 * vel[0];
-        let mut fz = 300.0 * ez - 60.0 * vel[1];
-        let mag = (fx * fx + fz * fz).sqrt();
-        if mag > max_force {
-            fx *= max_force / mag;
-            fz *= max_force / mag;
-        }
+        let d = (ex * ex + ez * ez).sqrt();
+        let (fx, fz) = if d > 1e-3 {
+            (max_force * ex / d, max_force * ez / d)
+        } else {
+            (0.0, 0.0)
+        };
 
         if s.tick % 100 == 0 {
             eprintln!(
