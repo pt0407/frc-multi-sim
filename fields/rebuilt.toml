@@ -5,40 +5,44 @@
 # GLB meshes replace these later via the same entries.
 
 name = "rebuilt-2026"
-half_x = 8.25   # meters; playable area 16.5 x 8.0
-half_z = 4.0
+half_x = 8.2705   # meters; fieldcore reference field is 16.541 x 8.069 (issue #44)
+half_z = 4.0345
 
 [ground]
 half_extents = [20.0, 0.1, 20.0]
 pos          = [0.0, -0.1, 0.0]
-friction     = 1.0
-restitution  = 0.0
+friction     = 0.82   # fieldcore field-collider material (issue #44)
+restitution  = 0.08
 
 # --- perimeter walls -------------------------------------------------------
 
 [[walls]]
 name         = "south"
-pos          = [0.0, 0.3, -4.0]
-half_extents = [8.25, 0.6, 0.05]
-friction     = 0.6
+pos          = [0.0, 0.3, -4.0345]
+half_extents = [8.2705, 0.6, 0.05]
+friction     = 0.82
+restitution  = 0.08
 
 [[walls]]
 name         = "north"
-pos          = [0.0, 0.3, 4.0]
-half_extents = [8.25, 0.6, 0.05]
-friction     = 0.6
+pos          = [0.0, 0.3, 4.0345]
+half_extents = [8.2705, 0.6, 0.05]
+friction     = 0.82
+restitution  = 0.08
 
 [[walls]]
 name         = "west"
-pos          = [-8.25, 0.3, 0.0]
-half_extents = [0.05, 0.6, 4.0]
-friction     = 0.6
+pos          = [-8.2705, 0.3, 0.0]
+half_extents = [0.05, 0.6, 4.0345]
+friction     = 0.82
+restitution  = 0.08
 
 [[walls]]
 name         = "east"
-pos          = [8.25, 0.3, 0.0]
-half_extents = [0.05, 0.6, 4.0]
-friction     = 0.6
+pos          = [8.2705, 0.3, 0.0]
+half_extents = [0.05, 0.6, 4.0345]
+friction     = 0.82
+restitution  = 0.08
 
 # --- obstacles -----------------------------------------------------------
 # REBUILT-flavored structures near the field edges (midfield kept clear so
@@ -80,13 +84,13 @@ friction     = 0.5
 
 [[scoring_zones]]
 name = "alliance-west"
-min  = [-8.25, -4.0]
-max  = [-6.0, 4.0]
+min  = [-8.2705, -4.0345]
+max  = [-6.0, 4.0345]
 
 [[scoring_zones]]
 name = "alliance-east"
-min  = [6.0, -4.0]
-max  = [8.25, 4.0]
+min  = [6.0, -4.0345]
+max  = [8.2705, 4.0345]
 
 [[climb_points]]
 name = "tower-south-top"

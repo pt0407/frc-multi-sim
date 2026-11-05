@@ -9,8 +9,8 @@ pub const PHYSICS_HZ: f32 = 400.0;
 pub const NUM_ROBOTS: usize = 2;
 pub const ROBOT_HALF: f32 = 0.4;
 pub const ROBOT_MASS: f32 = 60.0;
-pub const FIELD_HALF_X: f32 = 8.25;
-pub const FIELD_HALF_Z: f32 = 4.0;
+pub const FIELD_HALF_X: f32 = 8.2705; // fieldcore: 16.541 m field (issue #44)
+pub const FIELD_HALF_Z: f32 = 4.0345; // fieldcore: 8.069 m field (issue #44)
 
 /// One robot's spawn-time physical parameters (archetype). Defaults match
 /// the historical hard-coded chassis so existing behavior is unchanged.
@@ -126,8 +126,8 @@ impl World {
                 RigidBodyBuilder::dynamic()
                     .translation(vector![spec.spawn[0], spec.spawn[1], spec.spawn[2]])
                     .additional_mass(spec.mass)
-                    .linear_damping(1.0)
-                    .angular_damping(4.0)
+                    .linear_damping(0.02) // fieldcore chassis damping (issue #44)
+                    .angular_damping(0.08)
                     // chassis stays upright (2.5D drive, 3D contacts)
                     .enabled_rotations(false, true, false)
                     .ccd_enabled(true)
@@ -136,8 +136,12 @@ impl World {
             let [hx, hy, hz] = spec.half_extents;
             let col = w.colliders.insert_with_parent(
                 ColliderBuilder::cuboid(hx, hy, hz)
-                    .friction(0.9)
-                    .restitution(0.1)
+                    // fieldcore chassis collider (issue #40/#44): low
+                    // rolling-resistance friction, Min combine so the
+                    // pair vs the grippy ground stays ~0.04
+                    .friction(0.04)
+                    .friction_combine_rule(CoefficientCombineRule::Min)
+                    .restitution(0.01)
                     .density(1.0)
                     .build(),
                 body,
