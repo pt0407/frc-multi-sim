@@ -446,6 +446,15 @@ impl World {
 
     /// Arm joint angle for mechanism telemetry/tests (issue #57 spike).
     /// `None` when the robot has no `[mech]`.
+    /// Set the chassis collider friction for every robot (M4 tuning knob).
+    pub fn set_chassis_friction(&mut self, friction: f32) {
+        for &h in &self.chassis_colliders {
+            if let Some(c) = self.colliders.get_mut(h) {
+                c.set_friction(friction);
+            }
+        }
+    }
+
     pub fn mech_angle(&self, robot: usize) -> Option<f32> {
         self.mechs[robot]
             .as_ref()
