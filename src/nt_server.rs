@@ -33,14 +33,12 @@ struct State {
     /// subscriptions: conn -> list of (subuid, prefix match option)
     next_conn: AtomicU32,
     next_uid: AtomicU32,
-    next_pubuid: AtomicU32,
 }
 
 /// Shared handle a host program (e.g. mock robot code) uses to read/write topics.
 #[derive(Clone)]
 pub struct NtServer {
     state: Arc<Mutex<State>>,
-    time_us: Arc<AtomicU32>,
 }
 
 fn type_name(id: u32) -> &'static str {
@@ -93,9 +91,7 @@ impl NtServer {
                 conns: HashMap::new(),
                 next_conn: AtomicU32::new(1),
                 next_uid: AtomicU32::new(1),
-                next_pubuid: AtomicU32::new(1),
-            })),
-            time_us: Arc::new(AtomicU32::new(0)),
+                })),
         };
         let s = server.clone();
         tokio::spawn(async move { s.accept_loop(listener).await });
@@ -245,7 +241,7 @@ impl NtServer {
         }
 
         let state = self.state.clone();
-        let mut writer = tokio::spawn(async move {
+        let writer = tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
                 if sink.send(msg).await.is_err() {
                     break;
