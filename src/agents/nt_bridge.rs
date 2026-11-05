@@ -3,9 +3,10 @@
 //! topics, publishes sensor topics. Uses our minimal client
 //! (`nt_client` 0.5.1's GenericPublisher has a pubuid-latching bug, see
 //! issue #1).
+use crate::agents::proto_log::{Dir, ProtoLog};
 use crate::agents::CommandSlots;
 use crate::nt_client_min::NtClient;
-use crate::{ActuatorFrame, SensorFrame};
+use crate::{ActuatorFrame, AgentMsg, SensorFrame, ServerMsg};
 use std::sync::Arc;
 use tokio::time::Duration;
 
@@ -18,6 +19,7 @@ pub async fn run(
     port: u16,
     commands: Arc<CommandSlots>,
     sensor_tx: tokio::sync::broadcast::Sender<(usize, SensorFrame)>,
+    proto: Option<Arc<ProtoLog>>,
 ) {
     let mut failures: u32 = 0;
     loop {
@@ -50,7 +52,9 @@ pub async fn run(
         let poller = {
             let client = client.clone();
             let commands = commands.clone();
+            let proto = proto.clone();
             tokio::spawn(async move {
+                let mut last: Option<ActuatorFrame> = None;
                 loop {
                     tokio::time::sleep(Duration::from_millis(5)).await;
                     if !client.alive() {
@@ -59,16 +63,22 @@ pub async fn run(
                     let fx = client.get_f64("/sim/cmd_fx").unwrap_or(0.0) as f32;
                     let fz = client.get_f64("/sim/cmd_fz").unwrap_or(0.0) as f32;
                     let tq = client.get_f64("/sim/cmd_torque").unwrap_or(0.0) as f32;
-                    commands.set(
-                        robot_id,
-                        ActuatorFrame {
-                            force: [fx, fz],
-                            torque: tq,
-                            modules: None,
-                            intake_active: false,
-                            shoot: None,
-                        },
-                    );
+                    let cmd = ActuatorFrame {
+                        force: [fx, fz],
+                        torque: tq,
+                        modules: None,
+                        intake_active: false,
+                        shoot: None,
+                    };
+                    // NT topics are polled, not message-oriented: log only
+                    // on change so the file reflects logical traffic
+                    if proto.is_some() && last.as_ref() != Some(&cmd) {
+                        if let Some(p) = &proto {
+                            p.log(robot_id, Dir::In, &AgentMsg::Actuator(cmd.clone()));
+                        }
+                    }
+                    last = Some(cmd.clone());
+                    commands.set(robot_id, cmd);
                 }
             })
         };
@@ -95,6 +105,11 @@ pub async fn run(
                 .enumerate()
             {
                 client.set_f64(&format!("/sim/{n}"), vals[i] as f64);
+            }
+            // protocol-log the logical ServerMsg envelope (the NT topic
+            // writes above are its wire encoding, issue #31)
+            if let Some(p) = &proto {
+                p.log_at(s.tick, robot_id, Dir::Out, &ServerMsg::Sensor(s.clone()));
             }
         }
         // connection dropped: kill the poller and clear the command slot,

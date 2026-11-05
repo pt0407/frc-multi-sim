@@ -4,6 +4,7 @@
 //! services together.
 use anyhow::Result;
 use clap::Parser;
+use frc_sim_m0::agents::proto_log::ProtoLog;
 use frc_sim_m0::agents::{self, CommandSlots};
 use frc_sim_m0::config::{SimConfig, TimeMode};
 use frc_sim_m0::replay::{self, LogHeader, LogWriter, Record};
@@ -59,6 +60,12 @@ struct Args {
     /// bridge ports 5810/5820)
     #[arg(long)]
     debug_nt: Option<u16>,
+    /// Log every AgentMsg/ServerMsg envelope to this JSON-lines file
+    /// (issue #31): one `{"tick","robot","dir","msg"}` line per message,
+    /// covering both the WS and NT-bridge agent paths. Distinct from
+    /// --record (physics replay) — this captures protocol traffic.
+    #[arg(long)]
+    proto_log: Option<std::path::PathBuf>,
 }
 
 fn run_replay(cfg: &SimConfig) -> Result<()> {
@@ -182,6 +189,15 @@ async fn main() -> Result<()> {
         None => None,
     };
 
+    // optional protocol-layer message log (issue #31)
+    let proto_log = match &args.proto_log {
+        Some(path) => {
+            println!("protocol log -> {}", path.display());
+            Some(Arc::new(ProtoLog::create(path)?))
+        }
+        None => None,
+    };
+
     let commands = Arc::new(CommandSlots::new(num_robots));
     let (sensor_tx, _) = tokio::sync::broadcast::channel::<(usize, SensorFrame)>(256);
     let (world_tx, _) = tokio::sync::broadcast::channel::<frc_sim_m0::viz::VizFrame>(64);
@@ -212,6 +228,7 @@ async fn main() -> Result<()> {
             *port,
             commands.clone(),
             sensor_tx.clone(),
+            proto_log.clone(),
         ));
         println!("nt bridge for robot {} -> :{}", robot_id, port);
     }
@@ -220,6 +237,7 @@ async fn main() -> Result<()> {
     {
         let commands = commands.clone();
         let sensor_tx = sensor_tx.clone();
+        let proto_log = proto_log.clone();
         let mode = cfg.time_mode;
         tokio::spawn(async move {
             let mut tick: u64 = 0;
@@ -286,6 +304,9 @@ async fn main() -> Result<()> {
                         }
                         let _ = sensor_tx.send((r, frame));
                     }
+                    if let Some(p) = &proto_log {
+                        p.note_tick(tick);
+                    }
                     // spectator piece/score stream (~50 Hz source; the viz
                     // republishes at 30 Hz)
                     let _ = world_tx.send(frc_sim_m0::viz::VizFrame {
@@ -301,6 +322,9 @@ async fn main() -> Result<()> {
                         if let Some(w) = log.as_mut() {
                             let _ = w.flush();
                         }
+                        if let Some(p) = &proto_log {
+                            p.flush();
+                        }
                     }
                 }
                 tick += 1;
@@ -310,5 +334,5 @@ async fn main() -> Result<()> {
 
     let listener = TcpListener::bind("127.0.0.1:9770").await?;
     println!("orchestrator listening on ws://127.0.0.1:9770/robot/<id>");
-    agents::ws::serve(listener, num_robots, commands, sensor_tx).await
+    agents::ws::serve(listener, num_robots, commands, sensor_tx, proto_log).await
 }
