@@ -37,9 +37,9 @@ fn default_lineup_is_six_robots_in_alliance_rows() {
         );
     }
     // robots 0/1 keep the historical 2-robot spawns
-    assert_eq!(specs[0].spawn[0], -4.0);
+    assert_eq!(specs[0].spawn[0], -4.8);
     assert_eq!(specs[0].spawn[2], 0.0);
-    assert_eq!(specs[1].spawn[0], 4.0);
+    assert_eq!(specs[1].spawn[0], 4.8);
     assert_eq!(specs[1].spawn[2], 0.0);
     // all six spawn poses are distinct
     for i in 0..specs.len() {

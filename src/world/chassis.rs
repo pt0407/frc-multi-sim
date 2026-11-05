@@ -12,7 +12,7 @@ pub const ROBOT_MASS: f32 = 60.0; // kg
 /// Default lineup size (issue #11): 3 per alliance, alliance = robot_id % 2.
 pub const NUM_ROBOTS: usize = 6;
 /// Distance of each alliance's station row from midfield (m).
-pub const ALLIANCE_X: f32 = 4.0;
+pub const ALLIANCE_X: f32 = 4.8;
 /// Spacing between stations along z within an alliance row (m).
 pub const STATION_SPACING: f32 = 2.0;
 
