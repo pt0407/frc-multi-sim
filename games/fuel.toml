@@ -15,7 +15,7 @@
 [[zone]]
 center = [0.0, 0.0]
 half_extents = [2.615, 0.915]
-count = 120
+count = 408
 
 # depot stashes (inside each alliance's depot rails; west depot is -z)
 [[zone]]
@@ -26,6 +26,17 @@ count = 24
 [[zone]]
 center = [7.9, 1.93]
 half_extents = [0.4, 0.4]
+count = 24
+
+# outpost chute stashes (24 each per game manual 6.3.4)
+[[zone]]
+center = [-7.9, 2.6]
+half_extents = [0.35, 0.35]
+count = 24
+
+[[zone]]
+center = [7.9, -2.6]
+half_extents = [0.35, 0.35]
 count = 24
 
 # alliance 0 hub on the -x side, alliance 1 hub on +x. Opening is the
