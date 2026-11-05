@@ -89,6 +89,7 @@ pub async fn run(
                         server.publish(&format!("{base}/Vel"),    TY_DOUBLE_ARR, darr(&[0.0; 3]));
                         server.publish(&format!("{base}/AngVel"), TY_DOUBLE_ARR, darr(&[0.0; 3]));
                         server.publish(&format!("{base}/Contact"), TY_DOUBLE, rmpv::Value::from(0.0f64));
+                        server.publish(&format!("{base}/MechAngle"), TY_DOUBLE, rmpv::Value::from(0.0f64));
                     }
                     // AdvantageScope Pose2d: [x, y, yaw_rad] on the ground plane.
                     // Sim ground plane is (x, z) with y up.
@@ -131,6 +132,12 @@ pub async fn run(
                         &format!("{base}/Contact"),
                         rmpv::Value::from(f.contact_impulse as f64),
                     );
+                    if let Some(a) = f.mech_angle {
+                        server.set(
+                            &format!("{base}/MechAngle"),
+                            rmpv::Value::from(a as f64),
+                        );
+                    }
                 }
                 server.set("/Sim/Tick", rmpv::Value::from(tick as i64));
                 // match clock is identical for every robot; take any frame
