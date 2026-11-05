@@ -52,6 +52,10 @@ with every robot's pose, velocities, and contact impulse.
 ```bash
 cargo run --bin server
 cd web && npm install && npm run dev   # open http://localhost:5173
+# optional: download the real 2026 REBUILT field model (~18 MB, see
+# web/ASSETS.md for provenance). Without it the client falls back to
+# primitive walls/obstacles — physics is identical either way.
+npm run fetch-assets
 # in another shell, drive a robot and watch it move in the browser:
 cargo run --bin drive -- --robot-id 0 --target 4 0
 ```

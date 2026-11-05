@@ -56,6 +56,9 @@ fn config_msg(field: &FieldSpec) -> String {
             "obstacles": field.obstacles,
             "scoring_zones": field.scoring_zones,
             "climb_points": field.climb_points,
+            // optional GLB visual model (issue #42); null when the spec
+            // doesn't reference one — clients keep primitive geometry
+            "glb_url": field.glb_url,
         },
         "robot": { "half_extents": 0.4 },
     })

@@ -1,10 +1,14 @@
 //! Field arena geometry loaded from a TOML field spec (issue #14, PLAN C1).
 //!
 //! The spec describes the playable area, wall segments, generic box/cylinder
-//! obstacles, and placeholder scoring-zone / climb-point definitions. All
-//! colliders are primitives for now; when GLB field meshes land (C1
-//! follow-up) the spec's `obstacles`/`walls` entries are the seam where
-//! trimesh colliders will be produced instead.
+//! obstacles, and placeholder scoring-zone / climb-point definitions.
+//!
+//! Issue #42 (real field import): the shipped `fields/rebuilt.toml` carries
+//! primitive colliders whose positions/dims are derived from the official
+//! AdvantageScope `Field3d_2026FRCFieldV1` GLB (see `web/ASSETS.md`). The
+//! spec remains the single source of truth for physics — `glb_url` only
+//! points the web client at the visual model — so collider generation stays
+//! a pure function of the TOML.
 use anyhow::{bail, Context, Result};
 use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -133,6 +137,12 @@ pub struct FieldSpec {
     /// placeholder climb points (no colliders)
     #[serde(default)]
     pub climb_points: Vec<ClimbPointSpec>,
+    /// Optional URL (served by the web client) of a GLB visual model for
+    /// this field. Physics never reads it; it is forwarded to spectators so
+    /// the Babylon client renders the real field mesh when the asset is
+    /// present (issue #42).
+    #[serde(default)]
+    pub glb_url: Option<String>,
 }
 
 impl Default for FieldSpec {
@@ -181,6 +191,7 @@ impl Default for FieldSpec {
             obstacles: Vec::new(),
             scoring_zones: Vec::new(),
             climb_points: Vec::new(),
+            glb_url: None,
         }
     }
 }

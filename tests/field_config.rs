@@ -19,16 +19,74 @@ fn rebuilt_toml_loads_and_builds_expected_colliders() {
     assert!((spec.half_x - 8.2705).abs() < 1e-6);
     assert!((spec.half_z - 4.0345).abs() < 1e-6);
     assert_eq!(spec.walls.len(), 4);
-    assert_eq!(spec.obstacles.len(), 4);
-    assert_eq!(spec.scoring_zones.len(), 2);
+    // GLB-derived elements (issue #42): 2 hubs + 4 trenches + 4 bumps
+    // + 2 towers + 2 depot rail boxes
+    assert_eq!(spec.obstacles.len(), 14);
+    assert_eq!(spec.scoring_zones.len(), 4);
     assert_eq!(spec.climb_points.len(), 2);
-    // 1 ground + 4 walls + 4 obstacles
-    assert_eq!(spec.collider_count(), 9);
+    // 1 ground + 4 walls + 14 obstacles
+    assert_eq!(spec.collider_count(), 19);
 
     let mut bodies = RigidBodySet::new();
     let mut colliders = ColliderSet::new();
     build_arena(&spec, &mut bodies, &mut colliders);
-    assert_eq!(colliders.len(), 9);
+    assert_eq!(colliders.len(), 19);
+}
+
+/// Issue #42: the shipped layout must track the real 2026 REBUILT field
+/// geometry from the AdvantageScope Field3d_2026FRCFieldV1 GLB. These
+/// numbers come from node AABBs in model.glb (see web/ASSETS.md); if the
+/// spec drifts this test fails loudly instead of silently desyncing from
+/// the visual model.
+#[test]
+fn rebuilt_layout_matches_glb_elements() {
+    use frc_sim_m0::world::field::ObstacleSpec;
+    let spec = FieldSpec::load(&rebuilt_path()).unwrap();
+    assert_eq!(spec.glb_url.as_deref(), Some("/field-assets/rebuilt-2026.glb"));
+
+    let find = |name: &str| -> (&[f32; 3], &[f32; 3]) {
+        spec.obstacles
+            .iter()
+            .find_map(|o| match o {
+                ObstacleSpec::Box {
+                    pos,
+                    half_extents,
+                    name: Some(n),
+                    ..
+                } if n == name => Some((pos, half_extents)),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("missing obstacle {name}"))
+    };
+
+    // hub base plate: 1.182 m square centered at x=±3.645 (GLB GE-26301-01)
+    let (pos, he) = find("hub-west");
+    assert!((pos[0] + 3.645).abs() < 1e-3 && pos[2].abs() < 1e-3);
+    assert!((he[0] - 0.60).abs() < 0.02 && (he[2] - 0.60).abs() < 0.02);
+    let (pos2, _) = find("hub-east");
+    assert!((pos2[0] - 3.645).abs() < 1e-3);
+    // hub top must sit at/below the 2.13 m rim so shots can still enter
+    let (_, he_hub) = find("hub-west");
+    assert!(pos2[1] <= 2.13 && he_hub[1] * 2.0 >= 1.8);
+
+    // tower uprights: GLB x=±7.21, ~1.83 m tall; west tower at +z
+    let (pos, he) = find("tower-west");
+    assert!((pos[0] + 7.6).abs() < 0.2 && (pos[2] - 0.29).abs() < 0.05);
+    assert!(he[1] >= 0.85, "tower must be climb-height");
+
+    // trench skirts: z ≈ ±2.45..2.76 plus counterbalance arm toward wall
+    let (pos, he) = find("trench-sw");
+    assert!((pos[0] + 3.645).abs() < 1e-3 && pos[2] > 2.4);
+    assert!(pos[2] + he[2] >= 3.4, "trench box should cover the hinged arm");
+
+    // bump strips between hub and trench lanes
+    let (pos, he) = find("bump-s1");
+    assert!((pos[0] + 3.645).abs() < 1e-3 && (pos[2] - 1.67).abs() < 0.1);
+    assert!(he[1] <= 0.12, "bump is a low floor strip");
+
+    // climb points sit on the tower top rungs (y ≈ 1.83)
+    let cp = spec.climb_points.iter().find(|c| c.name == "tower-west-top").unwrap();
+    assert!((cp.pos[0] + 7.21).abs() < 0.1 && (cp.pos[1] - 1.83).abs() < 0.1);
 }
 
 #[test]

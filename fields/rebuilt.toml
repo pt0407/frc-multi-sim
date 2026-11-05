@@ -1,12 +1,17 @@
-# Field layout for the simulator (issue #14, PLAN C1).
-# 2026 REBUILT-flavored default: same playable area as the historical
-# hard-coded arena, plus placeholder obstacles / scoring zones / climb
-# points to exercise the config schema. All colliders are primitives;
-# GLB meshes replace these later via the same entries.
+# Field layout for the simulator (issue #14, PLAN C1; real geometry: #42).
+#
+# 2026 REBUILT field. Obstacle positions/dims are derived from the official
+# AdvantageScope field asset `Field3d_2026FRCFieldV1` (model.glb, meters,
+# y-up, x = field length) — see web/ASSETS.md for provenance. Colliders are
+# axis-aligned primitives chosen to bound the real field elements (hub,
+# trench, bump, tower, depot); the TOML stays authoritative for physics.
 
 name = "rebuilt-2026"
 half_x = 8.2705   # meters; fieldcore reference field is 16.541 x 8.069 (issue #44)
 half_z = 4.0345
+
+# Visual model rendered by web/ when present (fetch via `npm run fetch-assets`).
+glb_url = "/field-assets/rebuilt-2026.glb"
 
 [ground]
 half_extents = [20.0, 0.1, 20.0]
@@ -44,43 +49,136 @@ half_extents = [0.05, 0.6, 4.0345]
 friction     = 0.82
 restitution  = 0.08
 
-# --- obstacles -----------------------------------------------------------
-# REBUILT-flavored structures near the field edges (midfield kept clear so
-# the stock two-robot collision scenario is unaffected).
+# --- obstacles (GLB-derived bounding boxes) --------------------------------
+# Source: Field3d_2026FRCFieldV1 model.glb node AABBs (see web/ASSETS.md).
+# Each element appears once per alliance end (mirrored in x; towers/depots
+# also flip z).
 
+# HUB — GE-263xx assembly. Base plate 1.182 m square centered at x=±3.645,
+# front panel reaches x=±4.236, upper opening rim at y≈2.13.
 [[obstacles]]
 kind         = "box"
 name         = "hub-west"
-pos          = [-6.8, 0.5, 0.0]
-half_extents = [0.6, 0.5, 0.6]
+pos          = [-3.645, 1.05, 0.0]
+half_extents = [0.60, 1.05, 0.60]
 friction     = 0.7
 restitution  = 0.1
 
 [[obstacles]]
 kind         = "box"
 name         = "hub-east"
-pos          = [6.8, 0.5, 0.0]
-half_extents = [0.6, 0.5, 0.6]
+pos          = [3.645, 1.05, 0.0]
+half_extents = [0.60, 1.05, 0.60]
 friction     = 0.7
 restitution  = 0.1
 
+# TRENCH — GE-262xx assembly. One trench per side of each hub (4 total).
+# Skirt panels span z ≈ 2.45..2.76 m at x ≈ ±3.645; the hinged counter-
+# balance arm runs toward the side wall at y ≈ 0.62. One box bounds both.
 [[obstacles]]
-kind         = "cylinder"
-name         = "tower-south"
-pos          = [0.0, 0.75, -3.2]
-radius       = 0.4
-half_height  = 0.75
+kind         = "box"
+name         = "trench-sw"
+pos          = [-3.645, 0.38, 2.95]
+half_extents = [0.60, 0.38, 0.50]
+friction     = 0.7
+
+[[obstacles]]
+kind         = "box"
+name         = "trench-nw"
+pos          = [-3.645, 0.38, -2.95]
+half_extents = [0.60, 0.38, 0.50]
+friction     = 0.7
+
+[[obstacles]]
+kind         = "box"
+name         = "trench-se"
+pos          = [3.645, 0.38, 2.95]
+half_extents = [0.60, 0.38, 0.50]
+friction     = 0.7
+
+[[obstacles]]
+kind         = "box"
+name         = "trench-ne"
+pos          = [3.645, 0.38, -2.95]
+half_extents = [0.60, 0.38, 0.50]
+friction     = 0.7
+
+# BUMP — GE-261xx assembly. Floor strip between each hub and trench,
+# spanning z ≈ 0.59..2.75 at x ≈ ±3.645, ~0.16 m tall.
+[[obstacles]]
+kind         = "box"
+name         = "bump-s1"
+pos          = [-3.645, 0.085, 1.67]
+half_extents = [0.35, 0.085, 1.08]
+friction     = 0.8
+
+[[obstacles]]
+kind         = "box"
+name         = "bump-n1"
+pos          = [-3.645, 0.085, -1.67]
+half_extents = [0.35, 0.085, 1.08]
+friction     = 0.8
+
+[[obstacles]]
+kind         = "box"
+name         = "bump-s2"
+pos          = [3.645, 0.085, 1.67]
+half_extents = [0.35, 0.085, 1.08]
+friction     = 0.8
+
+[[obstacles]]
+kind         = "box"
+name         = "bump-n2"
+pos          = [3.645, 0.085, -1.67]
+half_extents = [0.35, 0.085, 1.08]
+friction     = 0.8
+
+# TOWER — GE-265xx assembly. Climbable structure against each alliance
+# wall: uprights at x ≈ ±7.21, base 1.17 x 0.99 m, plastic panels at the
+# wall face. West tower sits at +z, east tower at -z (mirrored).
+[[obstacles]]
+kind         = "box"
+name         = "tower-west"
+pos          = [-7.6, 0.92, 0.29]
+half_extents = [0.55, 0.92, 0.62]
 friction     = 0.5
 
 [[obstacles]]
-kind         = "cylinder"
-name         = "tower-north"
-pos          = [0.0, 0.75, 3.2]
-radius       = 0.4
-half_height  = 0.75
+kind         = "box"
+name         = "tower-east"
+pos          = [7.6, 0.92, -0.29]
+half_extents = [0.55, 0.92, 0.62]
 friction     = 0.5
+
+# DEPOT — GE-266xx floor rails (~5 cm tall) holding staged Fuel near each
+# alliance wall. West depot at -z, east depot at +z (mirrored).
+[[obstacles]]
+kind         = "box"
+name         = "depot-west"
+pos          = [-7.85, 0.03, -1.93]
+half_extents = [0.37, 0.03, 0.50]
+friction     = 0.8
+
+[[obstacles]]
+kind         = "box"
+name         = "depot-east"
+pos          = [7.85, 0.03, 1.93]
+half_extents = [0.37, 0.03, 0.50]
+friction     = 0.8
 
 # --- placeholders (no colliders; emitted to viz + hashed into replays) ----
+
+# scoring zones cover the hub footprints; game logic uses the cylindrical
+# [[hub]] entries in games/fuel.toml (entry at the 2.13 m rim height).
+[[scoring_zones]]
+name = "hub-west"
+min  = [-4.24, -0.60]
+max  = [-3.05, 0.60]
+
+[[scoring_zones]]
+name = "hub-east"
+min  = [3.05, -0.60]
+max  = [4.24, 0.60]
 
 [[scoring_zones]]
 name = "alliance-west"
@@ -92,10 +190,11 @@ name = "alliance-east"
 min  = [6.0, -4.0345]
 max  = [8.2705, 4.0345]
 
+# top rung of each tower (GE-26503 rungs top out at y ≈ 1.83)
 [[climb_points]]
-name = "tower-south-top"
-pos  = [0.0, 1.5, -3.2]
+name = "tower-west-top"
+pos  = [-7.21, 1.83, 0.29]
 
 [[climb_points]]
-name = "tower-north-top"
-pos  = [0.0, 1.5, 3.2]
+name = "tower-east-top"
+pos  = [7.21, 1.83, -0.29]
