@@ -1,0 +1,8 @@
+name = "team-track-m82"
+mass = 61.4
+half_extents = [0.426, 0.271, 0.426]
+max_force = 600.0
+drivetrain = "swerve"
+
+[sensors]
+preset = "competition"

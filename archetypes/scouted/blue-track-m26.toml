@@ -1,0 +1,8 @@
+name = "team-track-m26"
+mass = 57.5
+half_extents = [0.395, 0.251, 0.395]
+max_force = 600.0
+drivetrain = "swerve"
+
+[sensors]
+preset = "competition"

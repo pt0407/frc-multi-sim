@@ -1,0 +1,8 @@
+name = "team-track-m18"
+mass = 57.6
+half_extents = [0.34, 0.217, 0.34]
+max_force = 600.0
+drivetrain = "swerve"
+
+[sensors]
+preset = "competition"

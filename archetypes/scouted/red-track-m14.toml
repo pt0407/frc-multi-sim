@@ -1,0 +1,8 @@
+name = "team-track-m14"
+mass = 61.9
+half_extents = [0.492, 0.313, 0.492]
+max_force = 600.0
+drivetrain = "swerve"
+
+[sensors]
+preset = "competition"

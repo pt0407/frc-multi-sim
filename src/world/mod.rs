@@ -503,8 +503,14 @@ impl World {
                     let body = &self.bodies[self.chassis[i]];
                     let t = body.translation();
                     let r = body.rotation();
+                    // #61: if the robot has a mechanism arm, the intake
+                    // capture region rides the arm tip rather than the
+                    // chassis center — pieces are scooped by the arm.
+                    let origin = self
+                        .mech_arm_position(i)
+                        .unwrap_or([t.x, t.y, t.z]);
                     Some((
-                        [t.x, t.y, t.z],
+                        origin,
                         yaw_from_quat([r.i, r.j, r.k, r.w]),
                     ))
                 } else {
