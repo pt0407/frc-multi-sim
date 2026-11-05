@@ -33,7 +33,8 @@ pub struct RobotSpec {
     pub model: Option<ModelSpec>,
     /// optional articulated mechanism (issue #57 spike); `None` = the
     /// classic single rigid body
-    pub mech: Option<MechSpec>,
+    /// articulated mechanism parts (issue #61): intake arms, elevators
+    pub mechs: Vec<MechSpec>,
 }
 
 impl RobotSpec {
@@ -46,7 +47,7 @@ impl RobotSpec {
             intake: None,
             sensors: SensorConfig::default(),
             model: None,
-            mech: None,
+            mechs: Vec::new(),
         }
     }
 
@@ -59,7 +60,7 @@ impl RobotSpec {
             intake: a.intake,
             sensors: a.sensors.resolved(),
             model: a.model.clone(),
-            mech: a.mech,
+            mechs: a.mechs.clone(),
         }
     }
 }

@@ -30,11 +30,11 @@ pub struct Archetype {
     /// everything; otherwise the server warns on a mismatch.
     #[serde(default)]
     pub compatible_games: Vec<String>,
-    /// optional `[mech]` articulated mechanism (issue #57 spike): a
-    /// revolute-jointed arm rigid body attached to the chassis. `None` =
-    /// single rigid body, identical to today.
-    #[serde(default)]
-    pub mech: Option<MechSpec>,
+    /// articulated mechanism parts (issue #61): each `[[mech]]` table is
+    /// one rigid-body joint (issue #57 spike pattern). Empty = single rigid
+    /// body, identical to before.
+    #[serde(default, rename = "mech")]
+    pub mechs: Vec<MechSpec>,
     /// optional `[model]` visual asset (issue #43): GLB the web client
     /// renders instead of the fallback box. Display-only — physics stays
     /// authoritative on `mass`/`half_extents`.

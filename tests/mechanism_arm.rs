@@ -35,7 +35,7 @@ fn deploy_cmd() -> ActuatorFrame {
         modules: None,
         intake_active: false,
         shoot: None,
-        mech: Some(MechCommand { target: -0.6 }),
+        mech: Some(MechCommand { joint: 0, target: -0.6 }),
     }
 }
 
@@ -43,7 +43,7 @@ fn deploy_cmd() -> ActuatorFrame {
 /// ~0.9-1.1 m ahead of chassis center.
 fn rig() -> (World, usize) {
     let mut specs = chassis::default_specs();
-    specs[0].mech = Some(arm_spec());
+    specs[0].mechs = vec![arm_spec()];
     let table = PieceTable {
         zones: vec![SpawnZone {
             center: [-3.75, 0.0],
@@ -135,7 +135,7 @@ fn six_mech_robots_perf_smoke() {
         let mut specs = chassis::default_specs();
         if mech {
             for s in &mut specs {
-                s.mech = Some(arm_spec());
+                s.mechs = vec![arm_spec()];
             }
         }
         let mut w = World::with_config(

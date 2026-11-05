@@ -388,7 +388,7 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
                         model: None,
                         // mechanisms not yet serialized into replay
                         // headers (issue #57 spike follow-up)
-                        mech: None,
+                        mechs: Vec::new(),
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
@@ -539,7 +539,7 @@ fn read_cmd_record(r: &mut impl Read, fmt: u32) -> Result<Record> {
             let mut b = [0u8; 1];
             r.read_exact(&mut b)?;
             if b[0] == 1 {
-                Some(crate::MechCommand { target: r_f32(r)? })
+                Some(crate::MechCommand { joint: 0, target: r_f32(r)? })
             } else {
                 None
             }

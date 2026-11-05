@@ -75,7 +75,8 @@ pub struct World {
     sensors: Vec<SensorNoise>,
     /// per-robot articulated mechanism (issue #57 spike): `Some` only for
     /// specs that opt in via `[mech]`; `None` robots stay single-body
-    pub mechs: Vec<Option<mech::Mech>>,
+    /// articulated mechanism parts per robot (issue #61)
+    pub mechs: Vec<Vec<mech::Mech>>,
 }
 
 impl World {
@@ -214,25 +215,24 @@ impl World {
                 chassis::spawn_chassis(&mut w.bodies, &mut w.colliders, spec);
             w.chassis.push(body);
             w.chassis_colliders.push(col);
-            if let Some(mspec) = &spec.mech {
-                let m = mech::spawn_arm(
+            let mut mlist = Vec::new();
+            for mspec in &spec.mechs {
+                mlist.push(mech::spawn_arm(
                     &mut w.bodies,
                     &mut w.colliders,
                     &mut w.impulse_joints,
                     body,
                     mspec,
-                );
-                w.mechs.push(Some(m));
-            } else {
-                w.mechs.push(None);
+                ));
             }
+            w.mechs.push(mlist);
             println!(
                 "robot {} spawned at x={} mass={} half={:?} mech={}",
                 i,
                 spec.spawn[0],
                 spec.mass,
                 spec.half_extents,
-                spec.mech.is_some()
+                spec.mechs.len()
             );
         }
         // per-boot sensor biases draw from the world RNG in robot order
@@ -362,9 +362,12 @@ impl World {
                 // mechanism servo (issue #57 spike): retarget the arm's
                 // revolute motor when the agent commands it; target is
                 // clamped to the spec's joint limits
-                if let (Some(mcmd), Some(m)) =
-                    (cmd.mech, self.mechs.get_mut(i).and_then(|m| m.as_mut()))
-                {
+                if let Some(mcmd) = cmd.mech {
+                    if let Some(m) = self
+                        .mechs
+                        .get_mut(i)
+                        .and_then(|ms| ms.get_mut(mcmd.joint))
+                    {
                     let target =
                         mcmd.target.clamp(m.spec.limits[0], m.spec.limits[1]);
                     if let Some(j) = self.impulse_joints.get_mut(m.joint) {
@@ -374,6 +377,7 @@ impl World {
                             m.spec.motor_stiffness,
                             m.spec.motor_damping,
                         );
+                    }
                     }
                 }
                 // shooter: consume a held piece and spawn a ballistic fuel
@@ -597,13 +601,13 @@ impl World {
 
     pub fn mech_angle(&self, robot: usize) -> Option<f32> {
         self.mechs[robot]
-            .as_ref()
+            .first()
             .map(|m| mech::arm_angle(&self.bodies, m.arm))
     }
 
     /// World position of the mechanism arm's center of mass (viz/tests).
     pub fn mech_arm_position(&self, robot: usize) -> Option<[f32; 3]> {
-        self.mechs[robot].as_ref().map(|m| {
+        self.mechs[robot].first().map(|m| {
             let t = self.bodies[m.arm].translation();
             [t.x, t.y, t.z]
         })

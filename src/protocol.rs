@@ -99,7 +99,11 @@ pub struct ActuatorFrame {
 /// the robot's articulated arm joint.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct MechCommand {
-    /// revolute joint target angle, radians, clamped to the spec's limits
+    /// which mechanism joint (0-based, indexes RobotSpec.mechs); older
+    /// agents omit it -> joint 0
+    #[serde(default)]
+    pub joint: usize,
+    /// joint target angle/extent, clamped to the spec's limits
     pub target: f32,
 }
 
@@ -147,7 +151,7 @@ mod tests {
                 turret_yaw: 0.0,
                 launch_height: 0.5,
             }),
-            mech: Some(MechCommand { target: -0.5 }),
+            mech: Some(MechCommand { joint: 0, target: -0.5 }),
         });
         let s = serde_json::to_string(&m).unwrap();
         eprintln!("{}", s);
