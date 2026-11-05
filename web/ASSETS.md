@@ -55,3 +55,32 @@ encoded as the primitive colliders in `fields/rebuilt.toml`:
 
 `tests/field_config.rs` pins these numbers so the TOML cannot silently
 drift from the model.
+
+## Robot visual assets (issue #43)
+
+Archetype TOMLs may carry a `[model]` table (`url`, `scale`, `offset`,
+`rotation_deg`). The viz config message forwards it per robot id; the web
+client renders the GLB parented to the chassis when it loads and keeps the
+primitive box otherwise. Physics is unaffected — the cuboid in
+`half_extents` is always the collider.
+
+The shipped archetypes reference the **2026 KitBot**:
+
+| File | Source |
+| --- | --- |
+| `kitbot-2026.glb` | `model.glb` from the AdvantageScope asset package **`Robot_2026FRCKitBotV2`** |
+| `kitbot-2026-config.json` | `config.json` from the same package (pose fix, camera nodes) |
+
+- Package URL:
+  `https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_2026FRCKitBotV2.zip`
+- The KitBot model ships in AdvantageScope (Mechanical-Advantage) for FRC
+  visualization; same provenance/licensing notes as the field above —
+  fetched at build time, never vendored.
+- The archetype `[model]` `rotation_deg = [90, 0, 90]` and
+  `offset = [-0.30, 0.0, 0.05]` mirror the package's `config.json`
+  (`rotations: x+90°, z+90°`; `position: [-0.3, 0, 0.05]`), which maps the
+  GLB into the chassis frame (+x forward, +y up, meters).
+
+The intake region, when an archetype declares one, renders as a
+translucent chassis-relative box — a v1 mechanism proxy, not an
+articulated mechanism.

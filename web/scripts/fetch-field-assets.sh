@@ -27,3 +27,23 @@ cp "$TMP/field/config.json" "$OUT_DIR/advantagescope-config.json"
 
 echo "installed field assets to $OUT_DIR"
 ls -la "$OUT_DIR"
+
+# --- Robot visual assets (issue #43) -------------------------------------
+# 2026 KitBot GLB from the same AdvantageScopeAssets archive. Visual only —
+# robot colliders stay the archetype cuboid; see web/ASSETS.md.
+ROBOT_ZIP_URL="https://github.com/Mechanical-Advantage/AdvantageScopeAssets/releases/download/archive-v1/Robot_2026FRCKitBotV2.zip"
+ROBOT_OUT_DIR="$(cd "$(dirname "$0")/.." && pwd)/public/robot-assets"
+
+echo "downloading $ROBOT_ZIP_URL"
+curl -fSL "$ROBOT_ZIP_URL" -o "$TMP/robot.zip"
+unzip -o -q "$TMP/robot.zip" -d "$TMP/robot"
+
+mkdir -p "$ROBOT_OUT_DIR"
+# model.glb    = 2026 KitBot (chassis-frame fix lives in each archetype's
+#                [model] rotation_deg/offset, mirroring config.json)
+# config.json  = AdvantageScope asset config (pose fix, camera names)
+cp "$TMP/robot/model.glb"   "$ROBOT_OUT_DIR/kitbot-2026.glb"
+cp "$TMP/robot/config.json" "$ROBOT_OUT_DIR/kitbot-2026-config.json"
+
+echo "installed robot assets to $ROBOT_OUT_DIR"
+ls -la "$ROBOT_OUT_DIR"

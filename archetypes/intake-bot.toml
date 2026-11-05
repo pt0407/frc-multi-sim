@@ -18,6 +18,17 @@ z_max = 0.4
 y_min = -0.45
 y_max = 0.0
 
+# Visual model (issue #43): 2026 KitBot GLB from the AdvantageScope asset
+# packages (see web/ASSETS.md; `cd web && npm run fetch-assets`). The web
+# client renders this instead of the fallback box when the file is present.
+# rotation/offset replicate the bundle's config.json pose fix; physics is
+# still the cuboid above — this is display-only.
+[model]
+url = "/robot-assets/kitbot-2026.glb"
+scale = 1.0
+offset = [-0.30, 0.0, 0.05]
+rotation_deg = [90.0, 0.0, 90.0]
+
 # Sensor noise + vision latency model (issue #7).
 # presets: "off" (default), "clean", "competition"
 [sensors]

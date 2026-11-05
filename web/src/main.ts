@@ -10,6 +10,7 @@ import {
   Scene,
   SceneLoader,
   StandardMaterial,
+  TransformNode,
   Vector3,
 } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF";
@@ -37,6 +38,28 @@ interface ConfigMsg {
     glb_url?: string | null;
   };
   robot: { half_extents: number };
+  // per-robot visual/mechanism refs (issue #43); absent on pre-#43 servers
+  robots?: RobotCfg[];
+}
+interface ModelSpecMsg {
+  url: string;
+  scale?: number;
+  offset?: [number, number, number];
+  rotation_deg?: [number, number, number];
+}
+interface IntakeSpecMsg {
+  x_min: number;
+  x_max: number;
+  z_min: number;
+  z_max: number;
+  y_min: number;
+  y_max: number;
+}
+interface RobotCfg {
+  id: number;
+  half_extents?: [number, number, number];
+  model?: ModelSpecMsg | null;
+  intake?: IntakeSpecMsg | null;
 }
 interface StateMsg {
   type: "state";
@@ -63,7 +86,9 @@ new HemisphericLight("light", new Vector3(0.3, 1, 0.2), scene);
 
 const ROBOT_COLORS = [Color3.Red(), new Color3(0.2, 0.4, 1), new Color3(0, 0.8, 0.4), Color3.Yellow()];
 
-const robots = new Map<number, Mesh>();
+const robots = new Map<number, TransformNode>();
+const robotCfgs = new Map<number, RobotCfg>();
+const modelTried = new Set<number>();
 let robotHalf = 0.4;
 let fieldCfg: ConfigMsg["field"] | null = null;
 let built = false;
@@ -136,23 +161,87 @@ async function buildField() {
   }
 }
 
-function robotMesh(id: number): Mesh {
+function robotMesh(id: number): TransformNode {
   let m = robots.get(id);
   if (!m) {
-    m = MeshBuilder.CreateBox(`robot-${id}`, { size: robotHalf * 2 }, scene);
+    // root node receives the physics pose; children are display-only
+    const root = new TransformNode(`robot-${id}`, scene);
+    m = root;
+    const cfg = robotCfgs.get(id);
+    const [hx, hy, hz] = cfg?.half_extents ?? [robotHalf, robotHalf, robotHalf];
+
+    // primitive fallback (pre-#43 path, also kept until/if the GLB loads)
+    const box = MeshBuilder.CreateBox(`robot-${id}-box`, { width: hx * 2, height: hy * 2, depth: hz * 2 }, scene);
+    box.parent = root;
+    box.metadata = { fallback: true };
     const mat = new StandardMaterial(`rm-${id}`, scene);
     mat.diffuseColor = ROBOT_COLORS[id % ROBOT_COLORS.length];
-    m.material = mat;
+    box.material = mat;
     // heading marker on top so yaw is visible
-    const nose = MeshBuilder.CreateBox("nose", { width: robotHalf, height: 0.1, depth: 0.12 }, scene);
-    nose.parent = m;
-    nose.position = new Vector3(robotHalf * 0.6, robotHalf + 0.05, 0);
+    const nose = MeshBuilder.CreateBox("nose", { width: hx, height: 0.1, depth: 0.12 }, scene);
+    nose.parent = root;
+    nose.position = new Vector3(hx * 0.6, hy + 0.05, 0);
+    nose.metadata = { fallback: true };
     const nm = new StandardMaterial("nm", scene);
     nm.diffuseColor = Color3.White();
     nose.material = nm;
+
+    // intake mechanism proxy (issue #43 v1): translucent chassis-relative
+    // box over the declared capture region
+    if (cfg?.intake) {
+      const i = cfg.intake;
+      const intake = MeshBuilder.CreateBox(
+        `robot-${id}-intake`,
+        { width: i.x_max - i.x_min, height: i.y_max - i.y_min, depth: i.z_max - i.z_min },
+        scene,
+      );
+      intake.parent = root;
+      intake.position = new Vector3(
+        (i.x_min + i.x_max) / 2,
+        (i.y_min + i.y_max) / 2,
+        (i.z_min + i.z_max) / 2,
+      );
+      const im = new StandardMaterial(`im-${id}`, scene);
+      im.diffuseColor = new Color3(0.1, 0.9, 0.5);
+      im.emissiveColor = new Color3(0.05, 0.3, 0.15);
+      im.alpha = 0.35;
+      intake.material = im;
+    }
     robots.set(id, m);
   }
   return m;
+}
+
+// Load the archetype's GLB once (issue #43). On success the fallback
+// box/nose are disabled; on failure (asset not fetched, bad URL) the
+// primitives stay. The model spec's scale/offset/rotation orient the
+// asset into the chassis frame (+x forward, +y up).
+async function loadRobotModel(id: number, root: TransformNode, cfg: RobotCfg) {
+  if (!cfg.model || modelTried.has(id)) return;
+  modelTried.add(id);
+  try {
+    const result = await SceneLoader.ImportMeshAsync("", cfg.model.url, "", scene);
+    const holder = new TransformNode(`robot-${id}-model`, scene);
+    holder.parent = root;
+    const deg = Math.PI / 180;
+    const [rx, ry, rz] = cfg.model.rotation_deg ?? [0, 0, 0];
+    // euler applied X then Y then Z (quaternion product qz*qy*qx)
+    holder.rotationQuaternion = Quaternion.RotationAxis(new Vector3(0, 0, 1), rz * deg)
+      .multiply(Quaternion.RotationAxis(new Vector3(0, 1, 0), ry * deg))
+      .multiply(Quaternion.RotationAxis(new Vector3(1, 0, 0), rx * deg));
+    const [ox, oy, oz] = cfg.model.offset ?? [0, 0, 0];
+    holder.position = new Vector3(ox, oy, oz);
+    const s = cfg.model.scale ?? 1;
+    holder.scaling = new Vector3(s, s, s);
+    for (const mesh of result.meshes) {
+      if (!mesh.parent) mesh.parent = holder;
+    }
+    for (const child of root.getChildMeshes()) {
+      if (child.metadata?.fallback) child.setEnabled(false);
+    }
+  } catch (err) {
+    console.warn(`robot ${id} GLB unavailable, using box:`, err);
+  }
 }
 
 function connect() {
@@ -168,12 +257,15 @@ function connect() {
     if (msg.type === "config") {
       fieldCfg = msg.field;
       robotHalf = msg.robot.half_extents;
+      for (const rc of msg.robots ?? []) robotCfgs.set(rc.id, rc);
       buildField();
       return;
     }
     let lines = [`tick ${msg.tick}`];
     for (const r of msg.robots) {
       const m = robotMesh(r.id);
+      const rc = robotCfgs.get(r.id);
+      if (rc?.model) loadRobotModel(r.id, m, rc);
       m.position.set(r.position[0], r.position[1], r.position[2]);
       m.rotationQuaternion = new Quaternion(
         r.rotation[0], r.rotation[1], r.rotation[2], r.rotation[3],

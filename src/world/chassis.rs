@@ -3,7 +3,7 @@
 //! `RobotSpec` is the spawn-time physical description of one robot — what an
 //! archetype config resolves to. Spawn pose is stored per-spec so replay
 //! headers can carry the exact initial conditions.
-use crate::archetype::{Archetype, IntakeSpec};
+use crate::archetype::{Archetype, IntakeSpec, ModelSpec};
 use crate::world::noise::SensorConfig;
 use rapier3d::prelude::*;
 
@@ -17,7 +17,7 @@ pub const ALLIANCE_X: f32 = 4.8;
 pub const STATION_SPACING: f32 = 2.0;
 
 /// Spawn-time physical params for one robot (archetype or default).
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RobotSpec {
     pub mass: f32,
     /// cuboid half-extents [x, y, z]
@@ -28,6 +28,9 @@ pub struct RobotSpec {
     pub intake: Option<IntakeSpec>,
     /// resolved sensor-noise config (issue #7); disabled = pre-noise output
     pub sensors: SensorConfig,
+    /// optional visual GLB reference (issue #43); display-only, never
+    /// affects physics or the replay config hash
+    pub model: Option<ModelSpec>,
 }
 
 impl RobotSpec {
@@ -39,6 +42,7 @@ impl RobotSpec {
             spawn: [x, ROBOT_HALF + 0.05, 0.0],
             intake: None,
             sensors: SensorConfig::default(),
+            model: None,
         }
     }
 
@@ -50,6 +54,7 @@ impl RobotSpec {
             spawn: [xz[0], a.half_extents[1] + 0.05, xz[1]],
             intake: a.intake,
             sensors: a.sensors.resolved(),
+            model: a.model.clone(),
         }
     }
 }

@@ -2,7 +2,7 @@
 //! physical stats and drivetrain profile. Agents use `max_force` for their
 //! drive loop; the orchestrator uses `mass`/`half_extents` at spawn.
 use anyhow::{Context, Result};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -30,10 +30,52 @@ pub struct Archetype {
     /// everything; otherwise the server warns on a mismatch.
     #[serde(default)]
     pub compatible_games: Vec<String>,
+    /// optional `[model]` visual asset (issue #43): GLB the web client
+    /// renders instead of the fallback box. Display-only — physics stays
+    /// authoritative on `mass`/`half_extents`.
+    #[serde(default)]
+    pub model: Option<ModelSpec>,
 }
 
 fn default_drivetrain() -> String {
     "generic-holonomic".to_string()
+}
+
+/// Visual robot model reference (issue #43): a GLB the web viz loads in
+/// place of the primitive chassis box. Purely cosmetic — the physics
+/// robot remains the cuboid described by `half_extents`.
+///
+/// Optional `[model]` table in the archetype TOML:
+///
+/// ```toml
+/// [model]
+/// url = "/robot-assets/kitbot-2026.glb"   # served from web/public
+/// scale = 1.0                              # uniform display scale
+/// offset = [-0.30, 0.0, 0.05]              # chassis-frame offset, m
+/// rotation_deg = [90.0, 0.0, 90.0]         # euler X-then-Y-then-Z
+/// ```
+///
+/// `scale`/`offset`/`rotation_deg` orient the asset into the chassis
+/// frame (+x forward, +y up, meters). They are serialized into the viz
+/// config message verbatim; clients that can't load the URL fall back to
+/// the primitive box.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct ModelSpec {
+    /// GLB URL (typically a `/robot-assets/` path served by the web client)
+    pub url: String,
+    /// uniform display scale applied to the model (default 1.0)
+    #[serde(default = "one")]
+    pub scale: f32,
+    /// chassis-frame translation applied to the model root, meters
+    #[serde(default)]
+    pub offset: [f32; 3],
+    /// chassis-frame rotation, degrees, applied X then Y then Z
+    #[serde(default)]
+    pub rotation_deg: [f32; 3],
+}
+
+fn one() -> f32 {
+    1.0
 }
 
 /// Robot-relative active intake region (issue #3, FuelSim `registerIntake`
@@ -50,7 +92,7 @@ fn default_drivetrain() -> String {
 /// y_min = -0.4       # relative to chassis center
 /// y_max = 0.2
 /// ```
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
 pub struct IntakeSpec {
     pub x_min: f32,
     pub x_max: f32,

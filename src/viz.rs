@@ -6,6 +6,7 @@
 
 use anyhow::Result;
 use crate::world::field::FieldSpec;
+use crate::world::RobotSpec;
 use crate::SensorFrame;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::json;
@@ -38,7 +39,7 @@ pub struct VizFrame {
 /// real geometry — dims, wall segments, and obstacles — before the first
 /// state packet arrives. `wall_height`/`wall_thick` are kept for older
 /// clients that only know the legacy four-wall layout.
-fn config_msg(field: &FieldSpec) -> String {
+pub fn config_msg(field: &FieldSpec, specs: &[RobotSpec]) -> String {
     let wall_height = field
         .walls
         .iter()
@@ -60,7 +61,24 @@ fn config_msg(field: &FieldSpec) -> String {
             // doesn't reference one — clients keep primitive geometry
             "glb_url": field.glb_url,
         },
+        // legacy single-robot dims (pre-#43 clients)
         "robot": { "half_extents": 0.4 },
+        // per-robot visual/mechanism refs (issue #43): model = GLB to
+        // render instead of the fallback box (null = keep the box),
+        // intake = chassis-relative capture region shown as a translucent
+        // proxy while it's not a real articulated mechanism yet
+        "robots": specs
+            .iter()
+            .enumerate()
+            .map(|(id, s)| {
+                json!({
+                    "id": id,
+                    "half_extents": s.half_extents,
+                    "model": s.model,
+                    "intake": s.intake,
+                })
+            })
+            .collect::<Vec<_>>(),
     })
     .to_string()
 }
@@ -142,6 +160,7 @@ pub async fn run(
     sensor_tx: broadcast::Sender<(usize, SensorFrame)>,
     world_tx: broadcast::Sender<VizFrame>,
     field: FieldSpec,
+    specs: Vec<RobotSpec>,
 ) -> Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", VIZ_PORT)).await?;
     println!("spectator stream listening on ws://127.0.0.1:{VIZ_PORT}");
@@ -152,7 +171,7 @@ pub async fn run(
     loop {
         let (stream, addr) = listener.accept().await?;
         let mut rx = viz_tx.subscribe();
-        let cfg = config_msg(&field);
+        let cfg = config_msg(&field, &specs);
         tokio::spawn(async move {
             let Ok(ws) = tokio_tungstenite::accept_async(stream).await else {
                 return;
