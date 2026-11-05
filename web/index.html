@@ -24,7 +24,9 @@
       <button data-p="teleop">teleop</button>
       <button data-p="endgame">endgame</button>
       <button data-p="complete">end</button>
-      <button id="c-clear">clock</button>
+      <button id="c-clear">clock</button><br>
+      <button id="c-pause">pause</button>
+      <button id="c-reset">reset</button>
     </div>
     <script>
       const cws = new WebSocket("ws://127.0.0.1:9772");
@@ -38,6 +40,14 @@
         b.onclick = () => cws.send(JSON.stringify({op:"set_phase", phase:b.dataset.p}));
       document.getElementById("c-clear").onclick =
         () => cws.send(JSON.stringify({op:"clear_phase"}));
+      let paused = false;
+      document.getElementById("c-pause").onclick = function() {
+        paused = !paused;
+        this.textContent = paused ? "resume" : "pause";
+        cws.send(JSON.stringify({op:"pause", paused}));
+      };
+      document.getElementById("c-reset").onclick =
+        () => cws.send(JSON.stringify({op:"reset"}));
     </script>
     <script type="module" src="/src/main.ts"></script>
   </body>

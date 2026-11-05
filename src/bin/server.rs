@@ -233,6 +233,22 @@ async fn main() -> Result<()> {
     // shared with the control channel (issue #33); the physics loop locks
     // it briefly each step — step() is fully synchronous
     let world = Arc::new(std::sync::Mutex::new(world));
+    // shared match lifecycle: pause gate + reset factory (issue #33)
+    let ctl = std::sync::Arc::new(frc_sim_m0::control::MatchCtl {
+        paused: std::sync::atomic::AtomicBool::new(false),
+        make_world: std::sync::Mutex::new(Box::new({
+            let specs = specs.clone();
+            let seed = cfg.seed;
+            let field = field.clone();
+            let piece_table = piece_table.clone();
+            let match_cfg = match_cfg;
+            move || {
+                let mut w = World::with_config(&specs, seed, field.clone(), &piece_table);
+                w.match_clock = frc_sim_m0::r#match::MatchClock::new(match_cfg);
+                w
+            }
+        })),
+    });
 
     // optional event log: header first, then per-tick records in the loop
     let mut log = match &cfg.record {
@@ -358,6 +374,7 @@ async fn main() -> Result<()> {
         let world_tx = world_tx.clone();
         let world = world.clone();
         let mode = cfg.time_mode;
+        let ctl = ctl.clone();
         let mut policy_agents = policy_agents;
         let mut exp_log = exp_log;
         tokio::spawn(async move {
@@ -365,6 +382,10 @@ async fn main() -> Result<()> {
             let mut last_cmds: Vec<Option<frc_sim_m0::ActuatorFrame>> = vec![None; num_robots];
             let mut iv = interval(Duration::from_micros(1_000_000 / PHYSICS_HZ as u64));
             loop {
+                if ctl.paused.load(std::sync::atomic::Ordering::Relaxed) {
+                    iv.tick().await;
+                    continue;
+                }
                 match mode {
                     TimeMode::Realtime => {
                         iv.tick().await;
@@ -489,7 +510,7 @@ async fn main() -> Result<()> {
     if args.control_port != 0 {
         let listener = TcpListener::bind(("127.0.0.1", args.control_port)).await?;
         println!("match control on ws://127.0.0.1:{}", args.control_port);
-        tokio::spawn(frc_sim_m0::control::serve(listener, world.clone()));
+        tokio::spawn(frc_sim_m0::control::serve(listener, world.clone(), ctl.clone()));
     }
 
     let listener = TcpListener::bind("127.0.0.1:9770").await?;

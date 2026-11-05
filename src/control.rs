@@ -12,9 +12,22 @@ use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::tungstenite::Message;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
+/// Shared match-lifecycle state (issue #33 follow-up): the physics loop
+/// consults `paused` each tick; `make_world` rebuilds for reset.
+pub struct MatchCtl {
+    pub paused: AtomicBool,
+    pub make_world: std::sync::Mutex<Box<dyn Fn() -> World + Send>>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum ControlMsg {
+    /// Gate physics stepping — true pauses, false resumes.
+    Pause { paused: bool },
+    /// Rebuild the world from the recorded config (fresh match).
+    Reset,
     /// Force a match phase. `secs` omitted/0 = hold until `clear_phase`.
     SetPhase { phase: MatchPhase, secs: Option<f32> },
     /// Drop the phase override; the clock resumes.
@@ -49,6 +62,7 @@ fn status(world: &World) -> Status {
 async fn handle_conn(
     stream: TcpStream,
     world: Arc<Mutex<World>>,
+    ctl: Arc<MatchCtl>,
 ) -> anyhow::Result<()> {
     let Ok(ws) = tokio_tungstenite::accept_async(stream).await else {
         return Ok(());
@@ -57,6 +71,16 @@ async fn handle_conn(
     while let Some(Ok(msg)) = stream.next().await {
         let Message::Text(txt) = msg else { continue };
         let reply = match serde_json::from_str::<ControlMsg>(&txt) {
+            Ok(ControlMsg::Pause { paused }) => {
+                ctl.paused.store(paused, Ordering::Relaxed);
+                let w = world.lock().unwrap();
+                serde_json::to_string(&status(&w)).unwrap()
+            }
+            Ok(ControlMsg::Reset) => {
+                let mut w = world.lock().unwrap();
+                *w = (ctl.make_world.lock().unwrap())();
+                serde_json::to_string(&status(&w)).unwrap()
+            }
             Ok(ControlMsg::SetPhase { phase, secs }) => {
                 let mut w = world.lock().unwrap();
                 w.set_phase(phase, secs.unwrap_or(0.0));
@@ -86,12 +110,17 @@ async fn handle_conn(
 }
 
 /// Accept loop: one task per control client. Runs forever.
-pub async fn serve(listener: TcpListener, world: Arc<Mutex<World>>) -> anyhow::Result<()> {
+pub async fn serve(
+    listener: TcpListener,
+    world: Arc<Mutex<World>>,
+    ctl: Arc<MatchCtl>,
+) -> anyhow::Result<()> {
     loop {
         let (stream, addr) = listener.accept().await?;
         let world = world.clone();
+        let ctl = ctl.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_conn(stream, world).await {
+            if let Err(e) = handle_conn(stream, world, ctl).await {
                 eprintln!("control client {addr} error: {e}");
             }
         });
