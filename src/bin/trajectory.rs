@@ -13,8 +13,9 @@ use tokio_tungstenite::tungstenite::Message;
 struct Args {
     #[arg(long)]
     robot_id: usize,
-    /// waypoints as x,z pairs: --waypoints -3,-2 3,-2 3,2 -3,2
-    #[arg(long, num_args = 1.., value_delimiter = ',', allow_hyphen_values = true)]
+    /// waypoints as x,z pairs; repeat the flag per waypoint:
+    /// --waypoints=-3,-2 --waypoints=3,-2 --waypoints=3,2
+    #[arg(long, value_delimiter = ',', allow_hyphen_values = true)]
     waypoints: Vec<f32>,
     /// path file: one "x,z" waypoint per line (# comments ok)
     #[arg(long, conflicts_with = "waypoints")]
@@ -206,6 +207,12 @@ async fn main() -> Result<()> {
             fz *= max_force / mag;
         }
 
+        if s.tick % 100 == 0 {
+            eprintln!(
+                "t={} pos=({:.2},{:.2}) tgt=({:.2},{:.2}) f=({:.0},{:.0}) v=({:.2},{:.2})",
+                s.tick, pos[0], pos[1], target[0], target[1], fx, fz, vel[0], vel[1]
+            );
+        }
         sink.send(Message::Text(
             serde_json::to_string(&AgentMsg::Actuator(ActuatorFrame {
                 force: [fx, fz],

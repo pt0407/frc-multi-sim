@@ -4,6 +4,7 @@
 //! simulation deterministic and replayable (issue #5).
 pub mod chassis;
 pub mod field;
+pub mod noise;
 pub mod pieces;
 
 pub use crate::archetype::IntakeSpec;
@@ -15,6 +16,7 @@ use crate::drivetrain::{rot2, yaw_from_quat, Drivetrain};
 use crate::r#match::{MatchClock, MatchPhase, PhaseScore};
 use crate::rng::SimRng;
 use crate::{ActuatorFrame, SensorFrame};
+use noise::SensorNoise;
 use rapier3d::prelude::*;
 
 pub const PHYSICS_HZ: f32 = 400.0;
@@ -64,6 +66,8 @@ pub struct World {
     pub score_by_phase: [PhaseScore; 2],
     /// set once the climb bonus has been awarded at match completion
     match_finished: bool,
+    /// per-robot sensor noise/latency models (issue #7); drawn from `rng`
+    sensors: Vec<SensorNoise>,
 }
 
 impl World {
@@ -123,6 +127,7 @@ impl World {
             match_clock: MatchClock::default(),
             score_by_phase: [PhaseScore::default(); 2],
             match_finished: false,
+            sensors: Vec::new(),
         };
 
         field::build_arena(&w.field, &mut w.bodies, &mut w.colliders);
@@ -143,6 +148,12 @@ impl World {
                 i, spec.spawn[0], spec.mass, spec.half_extents
             );
         }
+        // per-boot sensor biases draw from the world RNG in robot order
+        // (disabled configs draw nothing → identical stream to before)
+        w.sensors = specs
+            .iter()
+            .map(|s| SensorNoise::new(s.sensors, &mut w.rng))
+            .collect();
         w
     }
 
@@ -364,7 +375,11 @@ impl World {
         }
     }
 
-    pub fn sensor_frame(&self, robot: usize, tick: u64) -> SensorFrame {
+    /// Ground-truth extraction + orchestrator-side sensor filtering (issue
+    /// #7). `&mut self` because the noise model draws from the world `SimRng`
+    /// and advances its vision latency queue — exactly one call per robot
+    /// per agent tick keeps server, replay, and tests in lockstep.
+    pub fn sensor_frame(&mut self, robot: usize, tick: u64) -> SensorFrame {
         let body = &self.bodies[self.chassis[robot]];
         let t = body.translation();
         let r = body.rotation();
@@ -385,7 +400,7 @@ impl World {
                     .sum::<usize>()
             })
             .sum::<usize>() as f32;
-        SensorFrame {
+        let mut frame = SensorFrame {
             tick,
             position: [t.x, t.y, t.z],
             rotation: [r.i, r.j, r.k, r.w],
@@ -396,7 +411,12 @@ impl World {
             score: self.scores[robot % self.scores.len()],
             match_state: self.match_clock.phase_at(tick),
             match_time: self.match_clock.time_remaining(tick),
-        }
+            vision_pose: None,
+        };
+        // noise layer: no-op (and zero RNG draws) when disabled
+        let true_pos = frame.position;
+        self.sensors[robot].apply(&mut self.rng, &mut frame, true_pos);
+        frame
     }
 
     /// World positions of all live (not captured/scored) pieces, for the

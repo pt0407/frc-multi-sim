@@ -4,3 +4,8 @@ mass = 90.0
 half_extents = [0.45, 0.40, 0.45]
 max_force = 1800.0
 drivetrain = "tank-push"     # placeholder profile name
+
+# Sensor noise + vision latency model (issue #7).
+# presets: "off" (default), "clean", "competition"
+[sensors]
+preset = "competition"

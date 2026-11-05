@@ -4,6 +4,7 @@
 //! archetype config resolves to. Spawn pose is stored per-spec so replay
 //! headers can carry the exact initial conditions.
 use crate::archetype::{Archetype, IntakeSpec};
+use crate::world::noise::SensorConfig;
 use rapier3d::prelude::*;
 
 pub const ROBOT_HALF: f32 = 0.4; // ~0.8m square chassis
@@ -20,6 +21,8 @@ pub struct RobotSpec {
     pub spawn: [f32; 3],
     /// robot-relative intake capture region (issue #3); `None` = no intake
     pub intake: Option<IntakeSpec>,
+    /// resolved sensor-noise config (issue #7); disabled = pre-noise output
+    pub sensors: SensorConfig,
 }
 
 impl RobotSpec {
@@ -30,6 +33,7 @@ impl RobotSpec {
             half_extents: [ROBOT_HALF; 3],
             spawn: [x, ROBOT_HALF + 0.05, 0.0],
             intake: None,
+            sensors: SensorConfig::default(),
         }
     }
 
@@ -40,6 +44,7 @@ impl RobotSpec {
             half_extents: a.half_extents,
             spawn: [x, a.half_extents[1] + 0.05, 0.0],
             intake: a.intake,
+            sensors: a.sensors.resolved(),
         }
     }
 }

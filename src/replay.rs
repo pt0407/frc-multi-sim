@@ -35,6 +35,7 @@
 use crate::archetype::IntakeSpec;
 use crate::protocol::ShotCommand;
 use crate::world::field::FieldSpec;
+use crate::world::noise::SensorConfig;
 use crate::world::pieces::{HubZone, PieceTable, SpawnZone};
 use crate::world::{RobotSpec, World, AGENT_EVERY};
 use crate::{ActuatorFrame, SensorFrame};
@@ -43,7 +44,7 @@ use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 
 const MAGIC: &[u8; 4] = b"FMSL";
-const FORMAT_VERSION: u32 = 2;
+const FORMAT_VERSION: u32 = 3;
 const KIND_CMD: u8 = 1;
 const KIND_STATE: u8 = 2;
 
@@ -135,6 +136,24 @@ impl LogWriter {
                     }
                 }
                 None => w.write_all(&[0])?,
+            }
+            // v3: resolved sensor-noise config (issue #7); replay rebuilds
+            // the same noise models from this block
+            w.write_all(&[s.sensors.enabled as u8])?;
+            for v in [
+                s.sensors.gyro_std,
+                s.sensors.pose_std,
+                s.sensors.vel_std,
+                s.sensors.gyro_bias,
+                s.sensors.pose_bias,
+                s.sensors.vel_bias,
+                s.sensors.vision_latency_s,
+                s.sensors.vision_hz,
+                s.sensors.vision_dropout,
+                s.sensors.vision_std_min,
+                s.sensors.vision_std_max,
+            ] {
+                w.write_all(&v.to_le_bytes())?;
             }
         }
         // v2: game-piece table
@@ -277,8 +296,8 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
         bail!("{}: not an FMSL replay log", path.display());
     }
     let fmt = r_u32(&mut r)?;
-    if fmt != FORMAT_VERSION && fmt != 1 {
-        bail!("unsupported log format version {fmt} (expected 1 or {FORMAT_VERSION})");
+    if !(1..=FORMAT_VERSION).contains(&fmt) {
+        bail!("unsupported log format version {fmt} (expected 1..={FORMAT_VERSION})");
     }
     let header = LogHeader {
         protocol_version: r_u32(&mut r)?,
@@ -309,11 +328,37 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
                     } else {
                         None
                     };
+                    // v3: sensor-noise config; older logs replay clean
+                    let sensors = if fmt >= 3 {
+                        let mut b = [0u8; 1];
+                        r.read_exact(&mut b)?;
+                        let mut f = [0.0f32; 11];
+                        for v in f.iter_mut() {
+                            *v = r_f32(&mut r)?;
+                        }
+                        SensorConfig {
+                            enabled: b[0] != 0,
+                            gyro_std: f[0],
+                            pose_std: f[1],
+                            vel_std: f[2],
+                            gyro_bias: f[3],
+                            pose_bias: f[4],
+                            vel_bias: f[5],
+                            vision_latency_s: f[6],
+                            vision_hz: f[7],
+                            vision_dropout: f[8],
+                            vision_std_min: f[9],
+                            vision_std_max: f[10],
+                        }
+                    } else {
+                        SensorConfig::default()
+                    };
                     Ok(RobotSpec {
                         mass,
                         half_extents,
                         spawn,
                         intake,
+                        sensors,
                     })
                 })
                 .collect::<Result<Vec<_>>>()?

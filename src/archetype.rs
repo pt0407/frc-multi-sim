@@ -22,6 +22,9 @@ pub struct Archetype {
     /// optional robot-relative intake region (issue #3)
     #[serde(default)]
     pub intake: Option<IntakeSpec>,
+    /// optional `[sensors]` noise/latency config (issue #7); absent = off
+    #[serde(default)]
+    pub sensors: crate::world::noise::SensorSpec,
 }
 
 fn default_drivetrain() -> String {
