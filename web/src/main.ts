@@ -85,8 +85,12 @@ const engine = new Engine(canvas, true);
 const scene = new Scene(engine);
 scene.clearColor = new Color4(0.06, 0.07, 0.09, 1);
 
-const camera = new ArcRotateCamera("cam", -Math.PI / 2, 0.9, 22, Vector3.Zero(), scene);
+const camera = new ArcRotateCamera("cam", -Math.PI / 2, 0.55, 30, Vector3.Zero(), scene);
 camera.attachControl(canvas, true);
+camera.minZ = 0.05;
+camera.maxZ = 300;
+camera.lowerRadiusLimit = 5;
+camera.upperRadiusLimit = 80;
 new HemisphericLight("light", new Vector3(0.3, 1, 0.2), scene);
 
 const ROBOT_COLORS = [Color3.Red(), new Color3(0.2, 0.4, 1), new Color3(0, 0.8, 0.4), Color3.Yellow()];
