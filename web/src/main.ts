@@ -80,6 +80,12 @@ interface StateMsg {
 type Msg = ConfigMsg | StateMsg;
 
 const hud = document.getElementById("hud")!;
+const telem = (() => {
+  const d = document.createElement("div");
+  d.style.cssText = "position:fixed;right:8px;top:120px;background:rgba(10,14,20,.8);color:#cfd8e3;padding:10px 12px;border-radius:8px;font:11px monospace;z-index:10;min-width:190px";
+  document.body.appendChild(d);
+  return d;
+})();
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 const engine = new Engine(canvas, true);
 const scene = new Scene(engine);
@@ -332,6 +338,18 @@ function connect() {
         banner.style.background = h === 0 ? "rgba(200,30,30,.85)" : "rgba(30,60,200,.85)";
         banner.style.color = "#fff";
       }
+    }
+    // telemetry rail (issue: match-ops UI): per-robot live stats
+    {
+      const rows: string[] = [`<b>tick ${(msg as any).tick ?? "?"} ${(msg as any).match_state ?? ""} ${((msg as any).match_time ?? 0).toFixed(0)}s</b>`,
+        `score ${(msg as any).scores?.join("–") ?? "—"}`];
+      robots.forEach((node, id) => {
+        const p = node.position;
+        const held = ((msg as any).held ?? [])[id] ?? 0;
+        const mech = ((msg as any).mech_angles ?? [])[id];
+        rows.push(`r${id} (${p.x.toFixed(1)},${p.z.toFixed(1)}) held=${held}${mech != null ? ` mech=${mech.toFixed(2)}` : ""}`);
+      });
+      telem.innerHTML = rows.join("<br>");
     }
     const plist = msg.pieces ?? [];
     for (let i = 0; i < MAX_PIECES; i++) {
