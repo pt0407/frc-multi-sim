@@ -12,9 +12,13 @@ const TICKS: usize = 1200; // 3 s at 400 Hz
 const PUSH_FORCE: f32 = 1200.0;
 const EPS: f32 = 0.1; // meters
 
-// Golden final positions recorded from this exact scenario
-// (contact first observed around tick 368).
-const GOLDEN: [[f32; 2]; 2] = [[-0.5124, -0.0719], [0.5028, 0.0995]];
+// Golden final positions recorded from this exact scenario.
+// Re-recorded after the issue #40/#44 physics pass (rolling-resistance
+// chassis + fieldcore damping): robots accelerate faster, contact first
+// observed around tick 242 (was 368), and the symmetric head-on push
+// settles them near-vertically aligned where the old scraping friction
+// left them offset.
+const GOLDEN: [[f32; 2]; 2] = [[-0.3991, 0.0031], [0.3992, -0.0032]];
 
 #[test]
 fn two_robots_collide_and_match_golden() {

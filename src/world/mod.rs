@@ -182,18 +182,38 @@ impl World {
             } else {
                 None
             };
-            if let Some(cmd) = cmd {
+            // per-wheel traction model runs every tick — even with no
+            // command — so the wheels' lateral friction resists pushes and
+            // scrubs drift (issue #40; an uncommanded real swerve still
+            // grips the carpet sideways). A zeroed frame keeps steer
+            // headings and applies only the lateral-slip force.
+            let zero = ActuatorFrame {
+                force: [0.0, 0.0],
+                torque: 0.0,
+                modules: None,
+                intake_active: false,
+                shoot: None,
+            };
+            let cmd = cmd.unwrap_or(&zero);
+            {
                 // per-wheel traction model: resolve the actuator command into
                 // module forces (grip-limited), then apply them off-center so
                 // yaw torque emerges from the force placement.
-                let (yaw, pos, lv) = {
+                let (yaw, pos, lv, av) = {
                     let body = &self.bodies[*handle];
                     let r = body.rotation();
                     (
                         yaw_from_quat([r.i, r.j, r.k, r.w]),
                         *body.translation(),
                         *body.linvel(),
+                        *body.angvel(),
                     )
+                };
+                let kin = crate::drivetrain::ChassisState {
+                    yaw,
+                    linvel: [lv.x, lv.z],
+                    yaw_rate: av.y,
+                    dt: self.integration.dt,
                 };
                 self.intake_active[i] = cmd.intake_active;
                 // shooter: consume a held piece and spawn a ballistic fuel
@@ -217,7 +237,7 @@ impl World {
                         ));
                     }
                 }
-                let resolved = self.drivetrains[i].resolve(cmd, yaw);
+                let resolved = self.drivetrains[i].resolve(cmd, &kin);
                 let body = &mut self.bodies[*handle];
                 body.reset_forces(true);
                 body.reset_torques(true);
@@ -233,10 +253,6 @@ impl World {
                         body.add_torque(vector![0.0, f.torque, 0.0], true);
                     }
                 }
-            } else {
-                let body = &mut self.bodies[*handle];
-                body.reset_forces(true);
-                body.reset_torques(true);
             }
         }
         // quadratic air drag on free pieces (FuelSim DRAG_FORCE_FACTOR)

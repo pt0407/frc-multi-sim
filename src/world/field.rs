@@ -10,21 +10,30 @@ use rapier3d::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
-/// Legacy half-dimensions of the default field, kept for callers that only
-/// need the playable-area extents (mirrors `sim.rs`'s test copy).
-pub const FIELD_HALF_X: f32 = 8.25;
-pub const FIELD_HALF_Z: f32 = 4.0;
+/// Playable-area half-dimensions (issue #44; provenance: fieldcore
+/// SimWorld.ts — 16.541 x 8.069 m field). These replace the historical
+/// 16.5 x 8.0 guess; mirrored in `sim.rs`'s legacy world.
+pub const FIELD_HALF_X: f32 = 8.2705;
+pub const FIELD_HALF_Z: f32 = 4.0345;
 
 /// FuelSim FIELD_COR (sqrt(22/51.5)). Field surfaces use this via the
 /// `Min` restitution combine rule: fuel-fuel keeps FUEL_COR while
 /// fuel-field bounces use FIELD_COR.
 pub const FIELD_COR: f32 = 0.6537;
 
+/// fieldcore field collider material (issue #44): friction 0.82,
+/// restitution 0.08 on mesh field colliders.
 fn default_ground_friction() -> f32 {
-    1.0
+    0.82
+}
+fn default_ground_restitution() -> f32 {
+    0.08
 }
 fn default_wall_friction() -> f32 {
-    0.6
+    0.82
+}
+fn default_wall_restitution() -> f32 {
+    0.08
 }
 
 /// Ground slab under the whole arena.
@@ -36,7 +45,7 @@ pub struct GroundSpec {
     pub pos: [f32; 3],
     #[serde(default = "default_ground_friction")]
     pub friction: f32,
-    #[serde(default)]
+    #[serde(default = "default_ground_restitution")]
     pub restitution: f32,
 }
 
@@ -49,7 +58,7 @@ pub struct WallSpec {
     pub half_extents: [f32; 3],
     #[serde(default = "default_wall_friction")]
     pub friction: f32,
-    #[serde(default)]
+    #[serde(default = "default_wall_restitution")]
     pub restitution: f32,
     /// optional label carried through to viz
     #[serde(default)]
@@ -136,36 +145,36 @@ impl Default for FieldSpec {
             ground: GroundSpec {
                 half_extents: [20.0, 0.1, 20.0],
                 pos: [0.0, -0.1, 0.0],
-                friction: 1.0,
-                restitution: 0.0,
+                friction: 0.82,
+                restitution: 0.08,
             },
             walls: vec![
                 WallSpec {
                     pos: [0.0, 0.3, -FIELD_HALF_Z],
                     half_extents: [FIELD_HALF_X, 0.6, 0.05],
-                    friction: 0.6,
-                    restitution: 0.0,
+                    friction: 0.82,
+                    restitution: 0.08,
                     name: Some("south".to_string()),
                 },
                 WallSpec {
                     pos: [0.0, 0.3, FIELD_HALF_Z],
                     half_extents: [FIELD_HALF_X, 0.6, 0.05],
-                    friction: 0.6,
-                    restitution: 0.0,
+                    friction: 0.82,
+                    restitution: 0.08,
                     name: Some("north".to_string()),
                 },
                 WallSpec {
                     pos: [-FIELD_HALF_X, 0.3, 0.0],
                     half_extents: [0.05, 0.6, FIELD_HALF_Z],
-                    friction: 0.6,
-                    restitution: 0.0,
+                    friction: 0.82,
+                    restitution: 0.08,
                     name: Some("west".to_string()),
                 },
                 WallSpec {
                     pos: [FIELD_HALF_X, 0.3, 0.0],
                     half_extents: [0.05, 0.6, FIELD_HALF_Z],
-                    friction: 0.6,
-                    restitution: 0.0,
+                    friction: 0.82,
+                    restitution: 0.08,
                     name: Some("east".to_string()),
                 },
             ],

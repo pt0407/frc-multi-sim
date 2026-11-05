@@ -6,6 +6,17 @@
 //! `F_max = mu * N_module`. The requested propelling force is applied in the
 //! module's steered direction; if its magnitude exceeds the grip limit the
 //! module is skidding and only `F_max` is transmitted (the excess is slip).
+//!
+//! Rolling vs sliding (issue #40): the chassis collider rests on the field
+//! with a low rolling-resistance coefficient (see `world/chassis.rs`), so
+//! ground contact no longer supplies the traction. Instead each module
+//! models its tire contact: the drive force transmits through rolling
+//! contact along the steered direction, and a lateral friction force
+//! opposes the sideways slip velocity of the module's contact point up to
+//! the friction-circle budget `sqrt(F_max^2 - F_drive^2)` the drive force
+//! leaves unused. That keeps robot-vs-robot pushing and wall scrubbing
+//! honest (lateral grip ~ mu * m * g) while a few newtons of commanded
+//! force still rolls the robot.
 //! maple-sim runs on dyn4j/2D; here we adapt the idea to rapier3d by
 //! returning per-module (application point, world force) pairs that the
 //! server applies via `RigidBody::add_force_at_point`, so yaw torque emerges
@@ -31,6 +42,21 @@ pub const GRAVITY: f32 = 9.81;
 pub struct ModuleCommand {
     pub steer: f32,
     pub force: f32,
+}
+
+/// Chassis motion state the traction model needs in order to compute
+/// wheel-contact slip velocities (issue #40). All values are sampled
+/// pre-step by the caller.
+#[derive(Debug, Clone, Copy)]
+pub struct ChassisState {
+    /// chassis yaw about +y (radians)
+    pub yaw: f32,
+    /// world-frame linear velocity [x, z] (m/s)
+    pub linvel: [f32; 2],
+    /// yaw rate about +y (rad/s)
+    pub yaw_rate: f32,
+    /// physics timestep (s) — used to size the lateral friction impulse
+    pub dt: f32,
 }
 
 /// A resolved force to apply to the chassis rigid body.
@@ -78,6 +104,11 @@ pub struct Drivetrain {
     pub max_module_force: f32,
     pub modules: Vec<ModuleSpec>,
     states: Vec<ModuleState>,
+    /// last commanded steer direction per module (robot frame, rad).
+    /// Persists across zero-force ticks so an unpowered module still
+    /// resists lateral slip in its last steered direction, like a real
+    /// wheel holding its heading (issue #40).
+    last_steer: Vec<f32>,
 }
 
 /// Rotate a robot-frame 2D vector into world frame given chassis yaw.
@@ -104,6 +135,7 @@ impl Drivetrain {
             max_module_force: f32::INFINITY,
             modules: vec![ModuleSpec { x: 0.0, z: 0.0 }],
             states: vec![ModuleState::default()],
+            last_steer: vec![0.0],
         }
     }
 
@@ -126,6 +158,7 @@ impl Drivetrain {
             max_module_force: 800.0,
             modules,
             states: vec![ModuleState::default(); n],
+            last_steer: vec![0.0; n],
         }
     }
 
@@ -176,8 +209,14 @@ impl Drivetrain {
 
     /// Turn an ActuatorFrame into per-point forces (robot-frame application
     /// points, world-frame force vectors). Mutates `states` for slip
-    /// reporting.
-    pub fn resolve(&mut self, cmd: &ActuatorFrame, yaw: f32) -> Vec<ResolvedForce> {
+    /// reporting. `kin` is the pre-step chassis motion state; with the
+    /// `Swerve` profile it drives the lateral tire-friction model (issue
+    /// #40): each module opposes the sideways slip velocity of its ground
+    /// contact point up to the grip budget the drive force leaves in the
+    /// friction circle, so wheels roll freely along their steer direction
+    /// while still gripping laterally.
+    pub fn resolve(&mut self, cmd: &ActuatorFrame, kin: &ChassisState) -> Vec<ResolvedForce> {
+        let yaw = kin.yaw;
         match self.profile {
             DrivetrainProfile::Simple => {
                 self.states[0].requested = (cmd.force[0].powi(2) + cmd.force[1].powi(2)).sqrt();
@@ -199,16 +238,33 @@ impl Drivetrain {
                         .enumerate()
                         .map(|(i, _)| {
                             let mc = mods.get(i).copied().unwrap_or(ModuleCommand {
-                                steer: 0.0,
+                                steer: self.last_steer[i],
                                 force: 0.0,
                             });
+                            self.last_steer[i] = mc.steer;
                             let dir = rot2([mc.steer.cos(), mc.steer.sin()], yaw);
                             [dir[0] * mc.force, dir[1] * mc.force]
                         })
                         .collect(),
-                    None => self.alloc_chassis_command(cmd.force, cmd.torque, yaw),
+                    None => {
+                        let alloc = self.alloc_chassis_command(cmd.force, cmd.torque, yaw);
+                        // the shim has no explicit steer channel: treat each
+                        // module's allocated force direction as its steered
+                        // rolling direction (mixed force+torque commands give
+                        // each wheel a distinct heading, like a real swerve).
+                        for (i, f) in alloc.iter().enumerate() {
+                            let rf = rot2(*f, -yaw); // world -> robot frame
+                            if rf[0] * rf[0] + rf[1] * rf[1] > 1e-6 {
+                                self.last_steer[i] = rf[1].atan2(rf[0]);
+                            }
+                        }
+                        alloc
+                    }
                 };
                 let cap = self.traction_limit(normal).min(self.max_module_force);
+                let grip = self.traction_limit(normal);
+                let n_mod = self.modules.len() as f32;
+                let m_mod = self.mass / n_mod;
                 let mut out = Vec::with_capacity(self.modules.len());
                 for (i, m) in self.modules.iter().enumerate() {
                     let f = desired[i];
@@ -217,6 +273,31 @@ impl Drivetrain {
                     // magnitude, preserving direction.
                     let applied_mag = mag.clamp(0.0, cap);
                     let scale = if mag > 1e-9 { applied_mag / mag } else { 0.0 };
+
+                    // Lateral tire friction (issue #40): the wheel rolls
+                    // along its steer direction (low resistance — the drive
+                    // force above transmits through rolling contact), but
+                    // resists sideways slip like a real tire. Compute the
+                    // lateral slip velocity of this module's ground contact
+                    // point (v_point = v_com + omega x r) and apply a force
+                    // that would cancel it within one tick, bounded by the
+                    // friction-circle budget the drive force didn't use.
+                    let wdir = rot2(
+                        [self.last_steer[i].cos(), self.last_steer[i].sin()],
+                        yaw,
+                    );
+                    let lat = [wdir[1], -wdir[0]];
+                    let r = rot2([m.x, m.z], yaw);
+                    // omega about +y: omega x r = (w*rz, 0, -w*rx)
+                    let vp = [
+                        kin.linvel[0] + kin.yaw_rate * r[1],
+                        kin.linvel[1] - kin.yaw_rate * r[0],
+                    ];
+                    let slip_v = vp[0] * lat[0] + vp[1] * lat[1];
+                    let budget =
+                        (grip * grip - applied_mag * applied_mag).max(0.0).sqrt();
+                    let f_lat = (-m_mod * slip_v / kin.dt).clamp(-budget, budget);
+
                     let st = &mut self.states[i];
                     st.requested = mag;
                     st.applied = applied_mag;
@@ -227,7 +308,7 @@ impl Drivetrain {
                     };
                     out.push(ResolvedForce {
                         local_point: [m.x, m.z],
-                        force: [f[0] * scale, f[1] * scale],
+                        force: [f[0] * scale + lat[0] * f_lat, f[1] * scale + lat[1] * f_lat],
                         torque: 0.0,
                     });
                 }
@@ -253,6 +334,16 @@ mod tests {
 
     fn swerve() -> Drivetrain {
         Drivetrain::swerve(60.0, 0.4)
+    }
+
+    /// stationary chassis at a given yaw — no lateral-slip force
+    fn kin(yaw: f32) -> ChassisState {
+        ChassisState {
+            yaw,
+            linvel: [0.0, 0.0],
+            yaw_rate: 0.0,
+            dt: 1.0 / 400.0,
+        }
     }
 
     #[test]
@@ -299,7 +390,7 @@ mod tests {
             intake_active: false,
             shoot: None,
         };
-        let out = d.resolve(&cmd, 0.7);
+        let out = d.resolve(&cmd, &kin(0.7));
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].force, [1200.0, -300.0]);
         assert_eq!(out[0].torque, 5.0);
@@ -317,7 +408,7 @@ mod tests {
             intake_active: false,
             shoot: None,
         };
-        let out = d.resolve(&cmd, 0.0);
+        let out = d.resolve(&cmd, &kin(0.0));
         assert_eq!(out.len(), 4);
         // net force sums to commanded force
         let fx: f32 = out.iter().map(|f| f.force[0]).sum();
@@ -342,7 +433,7 @@ mod tests {
             intake_active: false,
             shoot: None,
         };
-        let out = d.resolve(&cmd, 0.0);
+        let out = d.resolve(&cmd, &kin(0.0));
         let total: f32 = out
             .iter()
             .map(|f| (f.force[0].powi(2) + f.force[1].powi(2)).sqrt())
@@ -366,7 +457,7 @@ mod tests {
             intake_active: false,
             shoot: None,
         };
-        let out = d.resolve(&cmd, std::f32::consts::FRAC_PI_2);
+        let out = d.resolve(&cmd, &kin(std::f32::consts::FRAC_PI_2));
         for f in &out {
             // robot +z rotated by yaw=+90deg about +y -> world +x
             assert!(f.force[0] > 40.0, "f={:?}", f);

@@ -89,12 +89,18 @@ pub fn spawn_chassis(
     spec: &RobotSpec,
 ) -> (RigidBodyHandle, ColliderHandle) {
     let [hx, hy, hz] = spec.half_extents;
+    // Chassis material/damping constants — fieldcore SimWorld.ts values
+    // (issue #44; provenance: fieldcore). The collider friction is NOT the
+    // traction model: it only models rolling resistance + belly/wall
+    // contact, so it stays low (0.04). Drive traction and lateral grip live
+    // in the per-module tire model (`drivetrain.rs`, issue #40).
+    //   friction 0.04 · restitution 0.01 · lin damping 0.02 · ang damping 0.08
     let body = bodies.insert(
         RigidBodyBuilder::dynamic()
             .translation(vector![spec.spawn[0], spec.spawn[1], spec.spawn[2]])
             .additional_mass(spec.mass)
-            .linear_damping(1.0)
-            .angular_damping(4.0)
+            .linear_damping(0.02)
+            .angular_damping(0.08)
             // lock X/Z rotation: chassis stays upright (2.5D drive, 3D contacts)
             .enabled_rotations(false, true, false)
             .ccd_enabled(true)
@@ -102,8 +108,12 @@ pub fn spawn_chassis(
     );
     let col = colliders.insert_with_parent(
         ColliderBuilder::cuboid(hx, hy, hz)
-            .friction(0.9)
-            .restitution(0.1)
+            .friction(0.04)
+            // Min so chassis-vs-ground resolves to the 0.04 rolling
+            // coefficient regardless of the ground's higher coefficient
+            // (ground keeps friction 1.0 for game pieces).
+            .friction_combine_rule(CoefficientCombineRule::Min)
+            .restitution(0.01)
             .density(1.0)
             .build(),
         body,

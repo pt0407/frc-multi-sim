@@ -15,8 +15,9 @@ fn rebuilt_path() -> std::path::PathBuf {
 fn rebuilt_toml_loads_and_builds_expected_colliders() {
     let spec = FieldSpec::load(&rebuilt_path()).expect("rebuilt.toml should load");
     assert_eq!(spec.name.as_deref(), Some("rebuilt-2026"));
-    assert!((spec.half_x - 8.25).abs() < 1e-6);
-    assert!((spec.half_z - 4.0).abs() < 1e-6);
+    // fieldcore reference dims (issue #44): 16.541 x 8.069 m
+    assert!((spec.half_x - 8.2705).abs() < 1e-6);
+    assert!((spec.half_z - 4.0345).abs() < 1e-6);
     assert_eq!(spec.walls.len(), 4);
     assert_eq!(spec.obstacles.len(), 4);
     assert_eq!(spec.scoring_zones.len(), 2);

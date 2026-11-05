@@ -13,6 +13,20 @@
 //!   `FUEL_COR` with `Max` combine, giving fuel-vs-field = FIELD_COR,
 //!   fuel-vs-fuel = FUEL_COR, fuel-vs-robot = FUEL_COR (FuelSim's
 //!   ROBOT_COR = 0.1 is approximated by the livelier 0.5 — documented gap).
+//!
+//! Issue #44 audit vs fieldcore SimWorld.ts fuel constants:
+//!   fieldcore: mass 0.215 kg · diameter 0.150 m · friction 0.6 ·
+//!              restitution 0.18 · lin damping 0.16 · ang damping 0.22
+//!   FuelSim  : mass 0.204 kg (0.448 lb) · radius 0.075 m · friction n/a
+//!              (collider uses fieldcore's 0.6) · CORs below · drag below
+//! Diameter and friction agree. Mass is kept at the FuelSim value (0.204
+//! vs fieldcore 0.215 — unverified which matches the real piece; flagged
+//! in the PR). Restitution is modeled per-pair from FuelSim's four CORs
+//! rather than fieldcore's single 0.18 — the FuelSim model is the more
+//! faithful port. Rapier linear/angular damping is left at 0 because
+//! quadratic air drag (FuelSim) already models fuel dissipation; adding
+//! fieldcore's damping on top would double-count (also unverified whether
+//! fieldcore stacks both).
 use crate::rng::SimRng;
 use anyhow::{Context, Result};
 use rapier3d::prelude::*;
