@@ -94,6 +94,33 @@ const ROBOT_COLORS = [Color3.Red(), new Color3(0.2, 0.4, 1), new Color3(0, 0.8, 
 const robots = new Map<number, TransformNode>();
 const robotCfgs = new Map<number, RobotCfg>();
 const modelTried = new Set<number>();
+const pieces: Mesh[] = [];
+const MAX_PIECES = 200;
+
+function pieceMesh(i: number): Mesh {
+  while (pieces.length <= i) {
+    const m = MeshBuilder.CreateSphere(`piece-${pieces.length}`, { diameter: 0.3, segments: 8 }, scene);
+    const mat = new StandardMaterial(`pm-${pieces.length}`, scene);
+    mat.diffuseColor = new Color3(1.0, 0.55, 0.1);
+    m.material = mat;
+    pieces.push(m);
+  }
+  return pieces[i];
+}
+
+async function tryLoadFieldGlb(url: string): Promise<boolean> {
+  try {
+    const res = await SceneLoader.ImportMeshAsync("", location.origin, url, scene);
+    for (const m of res.meshes) {
+      if (/fuel/i.test(m.name)) m.setEnabled(false);
+    }
+    console.log(`field GLB loaded: ${res.meshes.length} meshes`);
+    return true;
+  } catch (e) {
+    console.warn(`field GLB ${url} failed, using primitives:`, e);
+    return false;
+  }
+}
 let robotHalf = 0.4;
 let fieldCfg: ConfigMsg["field"] | null = null;
 let built = false;
@@ -112,7 +139,7 @@ async function buildField() {
   buildPrimitives();
 }
 
-function buildPrimitives() {
+async function buildPrimitives() {
   if (!fieldCfg) return;
   const { half_x, half_z, wall_height, wall_thick } = fieldCfg;
 
@@ -282,8 +309,7 @@ function connect() {
     // game pieces (free ones only; held/scored are not in the list)
     const plist = msg.pieces ?? [];
     for (let i = 0; i < MAX_PIECES; i++) {
-      const m = pieces[i];
-      if (!m) break;
+      const m = pieceMesh(i);
       if (i < plist.length) {
         m.setEnabled(true);
         m.position.set(plist[i][0], plist[i][1] + 0.15, plist[i][2]);
