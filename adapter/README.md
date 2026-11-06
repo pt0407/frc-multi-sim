@@ -28,3 +28,17 @@ cd adapter/java && gradle build
 Needs JDK 17+ (`brew install openjdk`) + Gradle (`brew install gradle`).
 `ntcore-java` is vendored in `libs/` — the WPILib maven repo cert is
 broken on some networks, so the jar is committed directly.
+
+## Integration (real usage)
+
+`SimAdapter` is a drop-in class for a **real WPILib robot project** — it
+does not run standalone, because WPILib JNI natives resolve through the
+vendordep system, not loose jars:
+
+1. Copy `SimAdapter.java` into your robot project's `src/main/java/frc/sim/`
+2. Add the WPILib vendordep (your robot already has `WPILibNewCommands.json`
+   or equivalent — ntcore comes with it)
+3. Call `adapter.robotPeriodic()` in `Robot.robotPeriodic()`
+
+The Gradle project here (`adapter/java`) compiles the class against the
+real ntcore API — it's a verification scaffold, not a standalone runtime.
