@@ -1,4 +1,5 @@
 import {
+  AbstractMesh,
   ArcRotateCamera,
   Color3,
   Color4,
@@ -111,21 +112,23 @@ const ROBOT_COLORS = [Color3.Red(), new Color3(0.2, 0.4, 1), new Color3(0, 0.8, 
 const robots = new Map<number, TransformNode>();
 const robotCfgs = new Map<number, RobotCfg>();
 const modelTried = new Set<number>();
-const pieces: Mesh[] = [];
+const pieces: AbstractMesh[] = [];
 const MAX_PIECES = 200;
 
-// one shared material for all 504 pieces — per-mesh StandardMaterial was
-// the main draw-call cost (viz perf)
-let pieceMat: StandardMaterial | null = null;
-function pieceMesh(i: number): Mesh {
-  pieceMat ??= (() => {
-    const m = new StandardMaterial("pm", scene);
-    m.diffuseColor = new Color3(1.0, 0.55, 0.1);
-    return m;
-  })();
+// all 504 pieces are instances of one source mesh — a single draw call
+// instead of per-mesh geometry/material (viz perf)
+let pieceSrc: Mesh | null = null;
+function pieceMesh(i: number): AbstractMesh {
+  if (!pieceSrc) {
+    pieceSrc = MeshBuilder.CreateSphere("piece-src", { diameter: 0.15, segments: 6 }, scene);
+    const mat = new StandardMaterial("pm", scene);
+    mat.diffuseColor = new Color3(1.0, 0.55, 0.1);
+    pieceSrc.material = mat;
+    pieceSrc.setEnabled(false); // template only — instances do the drawing
+    pieces.push(pieceSrc);
+  }
   while (pieces.length <= i) {
-    const m = MeshBuilder.CreateSphere(`piece-${pieces.length}`, { diameter: 0.15, segments: 6 }, scene);
-    m.material = pieceMat;
+    const m = pieceSrc.createInstance(`piece-${pieces.length}`);
     pieces.push(m);
   }
   return pieces[i];
