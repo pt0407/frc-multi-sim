@@ -6,7 +6,7 @@ max_force = 1200.0
 drivetrain = "swerve"
 
 [model]
-url = "/robot-assets/2910.gltf"
+url = "/robot-assets/2910.glb"
 scale = 1.0
 offset = [-0.13, 0.0, 0.0]
 rotation_deg = [-90.0, 0.0, 0.0]
