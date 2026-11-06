@@ -90,7 +90,7 @@ pub fn config_msg(field: &FieldSpec, specs: &[RobotSpec]) -> String {
                         // doesn't declare its own CAD (issue #43 v2)
                         Some(crate::archetype::ModelSpec {
                             url: "/robot-assets/kitbot-2026.glb".into(),
-                            scale: 1.0,
+                            scale: 0.72,
                             offset: [-0.30, 0.0, 0.05],
                             rotation_deg: [0.0, -90.0, 0.0],
                         })

@@ -9,7 +9,7 @@ drivetrain = "swerve"        # placeholder profile name
 # `cd web && npm run fetch-assets` (provenance in web/ASSETS.md).
 [model]
 url = "/robot-assets/kitbot-2026.glb"
-scale = 1.0
+scale = 0.72
 offset = [-0.30, 0.0, 0.05]
 rotation_deg = [0.0, -90.0, 0.0]
 

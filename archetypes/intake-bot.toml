@@ -25,7 +25,7 @@ y_max = 0.0
 # still the cuboid above — this is display-only.
 [model]
 url = "/robot-assets/kitbot-2026.glb"
-scale = 1.0
+scale = 0.72
 offset = [-0.30, 0.0, 0.05]
 rotation_deg = [0.0, -90.0, 0.0]
 
