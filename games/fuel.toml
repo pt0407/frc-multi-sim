@@ -14,7 +14,7 @@
 # midfield neutral zone (official 5.23 x 1.83 m stash)
 [[zone]]
 center = [0.0, 0.0]
-half_extents = [2.615, 0.915]
+half_extents = [1.6, 0.55]
 count = 408
 
 # depot stashes (inside each alliance's depot rails; west depot is -z)
