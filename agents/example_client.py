@@ -34,16 +34,29 @@ def decide(s, wp):
 async def main():
     rid = int(sys.argv[1]) if len(sys.argv) > 1 else 0
     async with websockets.connect(f"ws://127.0.0.1:9770/robot/{rid}") as ws:
+        # handshake: the server rejects connections without a Hello
+        # carrying the matching protocol_version
+        await ws.send(json.dumps({
+            "type": "Hello",
+            "name": "example-python-agent",
+            "robot_id": rid,
+            "protocol_version": 1,
+        }))
         wp = 0
         async for raw in ws:
-            s = json.loads(raw)
-            if s.get("type") != "sensor":
+            msg = json.loads(raw)
+            if msg.get("type") == "Welcome":
                 continue
+            if msg.get("type") == "Error":
+                print("rejected:", msg["message"]); return
+            if msg.get("type") != "Sensor":
+                continue
+            s = msg  # fields are flattened onto the tagged envelope
             frame, done = decide(s, wp)
             if done:
                 wp = (wp + 1) % len(PATROL)
             if frame:
-                await ws.send(json.dumps({"type": "actuator", **frame}))
+                await ws.send(json.dumps({"type": "Actuator", **frame}))
 
 if __name__ == "__main__":
     asyncio.run(main())
