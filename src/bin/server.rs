@@ -23,6 +23,9 @@ struct Args {
     /// e.g. --archetype archetypes/fast-light.toml --archetype archetypes/heavy-pusher.toml
     #[arg(long)]
     archetype: Vec<std::path::PathBuf>,
+    /// number of robots in the lineup (default 6)
+    #[arg(long)]
+    num_robots: Option<usize>,
     /// Field layout TOML (issue #14). Defaults to the shipped 2026
     /// REBUILT-flavored layout; omit to use it, or pass another file.
     #[arg(long)]
@@ -184,6 +187,7 @@ async fn main() -> Result<()> {
         seed: args.seed,
         nt_ports: args.nt.clone(),
         archetypes: args.archetype.clone(),
+        num_robots: args.num_robots,
         field: args
             .field
             .clone()

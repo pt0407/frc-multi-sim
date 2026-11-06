@@ -32,6 +32,8 @@ pub struct SimConfig {
     pub nt_ports: Vec<u16>,
     /// archetype TOML paths, indexed by robot id
     pub archetypes: Vec<PathBuf>,
+    /// lineup size (default NUM_ROBOTS=6); truncate/extend via --num-robots
+    pub num_robots: Option<usize>,
     /// field layout TOML (issue #14); `None` -> built-in default layout
     pub field: Option<PathBuf>,
     /// game-piece spawn/scoring table TOML (issue #3); None = empty field
@@ -55,7 +57,9 @@ impl SimConfig {
     pub fn robot_specs(&self) -> Vec<RobotSpec> {
         // lineup defaults to NUM_ROBOTS (6, issue #11); extra --archetype
         // slots extend it with the same alliance-row layout
-        let n = NUM_ROBOTS.max(self.archetypes.len());
+        let n = NUM_ROBOTS
+            .max(self.archetypes.len())
+            .min(self.num_robots.unwrap_or(NUM_ROBOTS));
         let mut specs: Vec<RobotSpec> = (0..n).map(chassis::default_spec).collect();
         for (i, path) in self.archetypes.iter().enumerate() {
             match Archetype::load(path) {

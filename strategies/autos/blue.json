@@ -1,0 +1,84 @@
+{
+  "name": "blue-hub-auto",
+  "loop_actions": false,
+  "actions": [
+    {
+      "type": "goto",
+      "x": 3.0900000000000003,
+      "z": 0.0
+    },
+    {
+      "type": "wait",
+      "seconds": 0.5
+    },
+    {
+      "type": "shoot",
+      "launch_velocity": 9.5,
+      "hood_angle": 0.9,
+      "turret_yaw": 0.0,
+      "launch_height": 0.6
+    },
+    {
+      "type": "wait",
+      "seconds": 2.8
+    },
+    {
+      "type": "shoot",
+      "launch_velocity": 9.5,
+      "hood_angle": 0.9,
+      "turret_yaw": 0.0,
+      "launch_height": 0.6
+    },
+    {
+      "type": "wait",
+      "seconds": 2.8
+    },
+    {
+      "type": "shoot",
+      "launch_velocity": 9.5,
+      "hood_angle": 0.9,
+      "turret_yaw": 0.0,
+      "launch_height": 0.6
+    },
+    {
+      "type": "wait",
+      "seconds": 2.8
+    },
+    {
+      "type": "shoot",
+      "launch_velocity": 9.5,
+      "hood_angle": 0.9,
+      "turret_yaw": 0.0,
+      "launch_height": 0.6
+    },
+    {
+      "type": "wait",
+      "seconds": 2.8
+    },
+    {
+      "type": "shoot",
+      "launch_velocity": 9.5,
+      "hood_angle": 0.9,
+      "turret_yaw": 0.0,
+      "launch_height": 0.6
+    },
+    {
+      "type": "wait",
+      "seconds": 2.8
+    },
+    {
+      "type": "shoot",
+      "launch_velocity": 9.5,
+      "hood_angle": 0.9,
+      "turret_yaw": 0.0,
+      "launch_height": 0.6
+    },
+    {
+      "type": "wait",
+      "seconds": 2.8
+    },
+    {
+      "type": "hold"
+    }
+  ]
+}
