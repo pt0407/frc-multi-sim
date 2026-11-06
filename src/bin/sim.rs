@@ -124,6 +124,7 @@ fn main() -> Result<()> {
                 seed: args.seed,
                 nt_ports: vec![],
                 archetypes: args.archetype.clone(),
+                num_robots: None,
                 field: args.field.clone().or_else(|| {
                     let p = PathBuf::from("fields/rebuilt.toml");
                     p.exists().then_some(p)
