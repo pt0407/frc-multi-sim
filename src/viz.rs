@@ -92,7 +92,7 @@ pub fn config_msg(field: &FieldSpec, specs: &[RobotSpec]) -> String {
                             url: "/robot-assets/kitbot-2026.glb".into(),
                             scale: 0.72,
                             offset: [-0.30, 0.0, 0.05],
-                            rotation_deg: [0.0, -90.0, 0.0],
+                            rotation_deg: [90.0, 0.0, 90.0],
                         })
                     }),
                     "intake": s.intake,
