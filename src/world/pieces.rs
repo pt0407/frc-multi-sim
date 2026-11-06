@@ -159,13 +159,22 @@ pub fn spawn_table(
 ) -> Vec<RigidBodyHandle> {
     let mut out = Vec::with_capacity(table.piece_count());
     for z in &table.zones {
-        for _ in 0..z.count {
-            // uniform in [-1,1] from the seeded stream
-            let u = (rng.next_u64() >> 40) as f32 / ((1u64 << 24) as f32) * 2.0 - 1.0;
-            let v = (rng.next_u64() >> 40) as f32 / ((1u64 << 24) as f32) * 2.0 - 1.0;
-            let x = z.center[0] + u * z.half_extents[0];
-            let zz = z.center[1] + v * z.half_extents[1];
-            out.push(spawn_piece(bodies, colliders, [x, FUEL_RADIUS + 0.02, zz], [0.0; 3]));
+        // staged layout (match-ops realism): rows of fuel inside the zone
+        // footprint with a small seeded jitter — real staging is roughly
+        // uniform piles, not uniform scatter. Deterministic via rng.
+        let d = FUEL_RADIUS * 2.4; // spacing
+        let nx = ((z.half_extents[0] * 2.0) / d).floor().max(1.0) as usize;
+        let nz = ((z.half_extents[1] * 2.0) / d).floor().max(1.0) as usize;
+        for i in 0..z.count as usize {
+            let col = (i % nx) as f32;
+            let row = ((i / nx) % nz) as f32;
+            let layer = i / (nx * nz);
+            let x0 = z.center[0] - z.half_extents[0] + (col + 0.5) * (z.half_extents[0] * 2.0 / nx.max(1) as f32);
+            let z0 = z.center[1] - z.half_extents[1] + (row + 0.5) * (z.half_extents[1] * 2.0 / nz.max(1) as f32);
+            let jx = ((rng.next_u64() >> 40) as f32 / ((1u64 << 24) as f32) - 0.5) * 0.03;
+            let jz = ((rng.next_u64() >> 40) as f32 / ((1u64 << 24) as f32) - 0.5) * 0.03;
+            let y = FUEL_RADIUS + 0.02 + layer as f32 * d;
+            out.push(spawn_piece(bodies, colliders, [x0 + jx, y, z0 + jz], [0.0; 3]));
         }
     }
     out
