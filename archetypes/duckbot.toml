@@ -1,0 +1,12 @@
+name = "duckbot"
+half_extents = [0.45, 0.35, 0.45]
+mass = 55.0
+
+[model]
+url = "/robot-assets/duckbot.glb"
+scale = 0.5
+offset = [0.0, 0.0, 0.0]
+rotation_deg = [0.0, 0.0, 0.0]
+
+[sensors]
+noise = "clean"
