@@ -114,12 +114,18 @@ const modelTried = new Set<number>();
 const pieces: Mesh[] = [];
 const MAX_PIECES = 200;
 
+// one shared material for all 504 pieces — per-mesh StandardMaterial was
+// the main draw-call cost (viz perf)
+let pieceMat: StandardMaterial | null = null;
 function pieceMesh(i: number): Mesh {
+  pieceMat ??= (() => {
+    const m = new StandardMaterial("pm", scene);
+    m.diffuseColor = new Color3(1.0, 0.55, 0.1);
+    return m;
+  })();
   while (pieces.length <= i) {
-    const m = MeshBuilder.CreateSphere(`piece-${pieces.length}`, { diameter: 0.15, segments: 8 }, scene);
-    const mat = new StandardMaterial(`pm-${pieces.length}`, scene);
-    mat.diffuseColor = new Color3(1.0, 0.55, 0.1);
-    m.material = mat;
+    const m = MeshBuilder.CreateSphere(`piece-${pieces.length}`, { diameter: 0.15, segments: 6 }, scene);
+    m.material = pieceMat;
     pieces.push(m);
   }
   return pieces[i];
