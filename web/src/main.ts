@@ -3,6 +3,7 @@ import {
   Color3,
   Color4,
   Engine,
+  DirectionalLight,
   HemisphericLight,
   Mesh,
   MeshBuilder,
@@ -97,7 +98,13 @@ camera.minZ = 0.05;
 camera.maxZ = 300;
 camera.lowerRadiusLimit = 5;
 camera.upperRadiusLimit = 80;
-new HemisphericLight("light", new Vector3(0.3, 1, 0.2), scene);
+{
+  const hemi = new HemisphericLight("light", new Vector3(0.3, 1, 0.2), scene);
+  hemi.intensity = 0.9;
+  const dir = new DirectionalLight("dir", new Vector3(-0.4, -1, 0.3), scene);
+  dir.intensity = 0.6;
+  dir.position = new Vector3(4, 12, -3);
+}
 
 const ROBOT_COLORS = [Color3.Red(), new Color3(0.2, 0.4, 1), new Color3(0, 0.8, 0.4), Color3.Yellow()];
 
@@ -109,7 +116,7 @@ const MAX_PIECES = 200;
 
 function pieceMesh(i: number): Mesh {
   while (pieces.length <= i) {
-    const m = MeshBuilder.CreateSphere(`piece-${pieces.length}`, { diameter: 0.3, segments: 8 }, scene);
+    const m = MeshBuilder.CreateSphere(`piece-${pieces.length}`, { diameter: 0.15, segments: 8 }, scene);
     const mat = new StandardMaterial(`pm-${pieces.length}`, scene);
     mat.diffuseColor = new Color3(1.0, 0.55, 0.1);
     m.material = mat;

@@ -27,7 +27,7 @@ y_max = 0.0
 url = "/robot-assets/kitbot-2026.glb"
 scale = 1.0
 offset = [-0.30, 0.0, 0.05]
-rotation_deg = [-90.0, 0.0, 90.0]
+rotation_deg = [90.0, 0.0, 90.0]
 
 # Articulated intake arm (issue #57 SPIKE): a revolute-jointed bar pinned
 # to the front-top bumper corner, position-servoed by the actuator frame's
