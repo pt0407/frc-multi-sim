@@ -95,8 +95,8 @@ fn viz_config_carries_per_robot_model_refs() {
     assert_eq!(robots.len(), 2);
     assert_eq!(robots[0]["id"], 0);
     assert_eq!(robots[0]["model"]["url"], "/robot-assets/kitbot-2026.glb");
-    // robot 1 has no model -> null, client keeps the primitive box
-    assert!(robots[1]["model"].is_null());
+    // robot 1 has no declared model -> viz defaults to KitBot (no boxes)
+    assert_eq!(robots[1]["model"]["url"], "/robot-assets/kitbot-2026.glb");
     // per-robot half extents + intake proxy info ride along
     assert_eq!(robots[0]["half_extents"].as_array().unwrap().len(), 3);
     assert!(robots[0]["intake"].is_null());
