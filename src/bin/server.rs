@@ -476,8 +476,9 @@ async fn main() -> Result<()> {
                                 }
                             }
                         }
-                        // spectator piece/score stream (~50 Hz source; the viz
-                        // republishes at 30 Hz)
+                        // spectator piece/score stream — 50 Hz (every 8
+                        // physics ticks); was 400 Hz and was the lag source
+                        if tick % 8 == 0 {
                         let _ = world_tx.send(frc_sim_m0::viz::VizFrame {
                             tick,
                             pieces: world.piece_positions(),
@@ -502,6 +503,7 @@ async fn main() -> Result<()> {
                                 .map(|r| world.mech_angle(r))
                                 .collect(),
                         });
+                        }
                     }
                 }
                 // periodic flush so a killed server loses at most ~1 s
