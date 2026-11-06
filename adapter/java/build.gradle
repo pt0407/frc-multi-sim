@@ -1,4 +1,5 @@
-plugins { id 'java' }
+plugins { id 'java'; id 'application' }
+application { mainClass = 'frc.sim.SimRobot' }
 group = 'frc.sim'
 repositories {
     mavenCentral()
