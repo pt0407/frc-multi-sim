@@ -9,7 +9,7 @@ drivetrain = "swerve"
 url = "/robot-assets/2910.gltf"
 scale = 1.0
 offset = [-0.13, 0.0, 0.0]
-rotation_deg = [90.0, 0.0, 0.0]
+rotation_deg = [-90.0, 0.0, 0.0]
 
 [sensors]
 preset = "competition"

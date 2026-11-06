@@ -297,6 +297,10 @@ async function loadRobotModel(id: number, root: TransformNode, cfg: RobotCfg) {
   modelTried.add(id);
   try {
     const result = await SceneLoader.ImportMeshAsync("", cfg.model.url, "", scene);
+    for (const m of result.meshes) {
+      // staged fuel props baked into the CAD are sim-owned — hide them
+      if (/fuel/i.test(m.name)) m.setEnabled(false);
+    }
     const holder = new TransformNode(`robot-${id}-model`, scene);
     holder.parent = root;
     const deg = Math.PI / 180;
