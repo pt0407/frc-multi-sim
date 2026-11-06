@@ -28,6 +28,8 @@ pub enum ControlMsg {
     Pause { paused: bool },
     /// Rebuild the world from the recorded config (fresh match).
     Reset,
+    /// Arm the match: exit staging, start the clock at auto.
+    StartMatch,
     /// Force a match phase. `secs` omitted/0 = hold until `clear_phase`.
     SetPhase { phase: MatchPhase, secs: Option<f32> },
     /// Drop the phase override; the clock resumes.
@@ -74,6 +76,12 @@ async fn handle_conn(
             Ok(ControlMsg::Pause { paused }) => {
                 ctl.paused.store(paused, Ordering::Relaxed);
                 let w = world.lock().unwrap();
+                serde_json::to_string(&status(&w)).unwrap()
+            }
+            Ok(ControlMsg::StartMatch) => {
+                let mut w = world.lock().unwrap();
+                w.match_clock.config.disabled_s = 0.0;
+                w.start_match();
                 serde_json::to_string(&status(&w)).unwrap()
             }
             Ok(ControlMsg::Reset) => {

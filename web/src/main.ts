@@ -298,7 +298,10 @@ async function loadRobotModel(id: number, root: TransformNode, cfg: RobotCfg) {
     const holder = new TransformNode(`robot-${id}-model`, scene);
     holder.parent = root;
     const deg = Math.PI / 180;
-    const [rx, ry, rz] = cfg.model.rotation_deg ?? [0, 0, 0];
+    const urlRot = new URLSearchParams(location.search).get("rot");
+    const [rx, ry, rz] = urlRot
+      ? urlRot.split(",").map(Number) as [number, number, number]
+      : (cfg.model.rotation_deg ?? [0, 0, 0]);
     // euler applied X then Y then Z (quaternion product qz*qy*qx)
     holder.rotationQuaternion = Quaternion.RotationAxis(new Vector3(0, 0, 1), rz * deg)
       .multiply(Quaternion.RotationAxis(new Vector3(0, 1, 0), ry * deg))

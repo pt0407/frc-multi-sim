@@ -17,7 +17,7 @@ pieces = "fuel.toml"
 # auto + teleop + endgame = 160 s real match (20 auto + 140 driver).
 
 [match]
-disabled_s          = 0.0
+disabled_s          = 99999.0
 auto_s              = 20.0
 teleop_s            = 110.0
 endgame_s           = 30.0

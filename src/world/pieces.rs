@@ -159,17 +159,21 @@ pub fn spawn_table(
 ) -> Vec<RigidBodyHandle> {
     let mut out = Vec::with_capacity(table.piece_count());
     for z in &table.zones {
-        // real staging: pieces scattered at floor height inside the zone
-        // footprint (a loose pile, ~1-2 balls deep). Grid rows look staged;
-        // uniform scatter + tiny y offset for overflow matches the field.
+        // real staging: hex-ish grid pile inside the zone footprint.
+        // spacing >= ball diameter so balls never overlap; 2-3 layers
+        // give the loose-pile look field staff produce.
+        let pitch = FUEL_RADIUS * 2.2;      // ~0.165 m center spacing
+        let nx = ((z.half_extents[0] * 2.0) / pitch).floor().max(1.0) as usize;
+        let nz = ((z.half_extents[1] * 2.0) / pitch).floor().max(1.0) as usize;
         for i in 0..z.count as usize {
-            let u = (rng.next_u64() >> 40) as f32 / ((1u64 << 24) as f32) * 2.0 - 1.0;
-            let v = (rng.next_u64() >> 40) as f32 / ((1u64 << 24) as f32) * 2.0 - 1.0;
-            let x = z.center[0] + u * z.half_extents[0];
-            let zz = z.center[1] + v * z.half_extents[1];
-            // overflow stacking: every ~4th piece sits slightly higher so
-            // the mound is ~1.3 balls deep on average, not a flat grid
-            let y = FUEL_RADIUS + 0.02 + if i % 4 == 3 { FUEL_RADIUS * 1.5 } else { 0.0 };
+            let col = (i % nx) as f32;
+            let row = ((i / nx) % nz) as f32;
+            let layer = i / (nx * nz);
+            // stagger alternate rows by half a pitch (hex packing)
+            let row_off = if ((i / nx) % 2) == 1 { pitch * 0.5 } else { 0.0 };
+            let x = z.center[0] - z.half_extents[0] + pitch * (col + 0.5) + row_off;
+            let zz = z.center[1] - z.half_extents[1] + pitch * (row + 0.5);
+            let y = FUEL_RADIUS + 0.02 + layer as f32 * FUEL_RADIUS * 2.1;
             out.push(spawn_piece(bodies, colliders, [x, y, zz], [0.0; 3]));
         }
     }

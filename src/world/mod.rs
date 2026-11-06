@@ -62,6 +62,10 @@ pub struct World {
     /// match state machine config (issue #10); default = start enabled
     /// (disabled_s = 0) so bare worlds behave exactly like before
     pub match_clock: MatchClock,
+    /// physics tick when the match was started (start_match); the match
+    /// clock is a function of `tick - match_epoch` so staging time doesn't
+    /// count. Set via `start_match()`.
+    pub match_epoch: u64,
     /// per-alliance score attributed to the phase it was scored in
     /// (auto / teleop / endgame+bonus); `scores` stays the running total
     pub score_by_phase: [PhaseScore; 2],
@@ -135,6 +139,7 @@ impl World {
             intake_active: vec![false; specs.len()],
             tick: 0,
             match_clock: MatchClock::default(),
+            match_epoch: 0,
             score_by_phase: [PhaseScore::default(); 2],
             match_finished: false,
             phase_override: None,
@@ -259,7 +264,7 @@ impl World {
     pub fn phase_at_tick(&self, tick: u64) -> MatchPhase {
         self.phase_override
             .map(|(p, _)| p)
-            .unwrap_or_else(|| self.match_clock.phase_at(tick))
+            .unwrap_or_else(|| self.match_clock.phase_at(tick.saturating_sub(self.match_epoch)))
     }
 
     /// Seconds remaining in the current phase (override-aware).
@@ -271,7 +276,7 @@ impl World {
     pub fn time_remaining_at_tick(&self, tick: u64) -> f32 {
         match self.phase_override {
             Some((_, ticks)) => ticks as f32 / PHYSICS_HZ,
-            None => self.match_clock.time_remaining(tick),
+            None => self.match_clock.time_remaining(tick.saturating_sub(self.match_epoch)),
         }
     }
 
@@ -600,14 +605,22 @@ impl World {
         if self.match_clock.config.shift_s <= 0.0 {
             return true;
         }
-        if self.match_clock.phase_at(tick) != crate::r#match::MatchPhase::Teleop {
+        let mt = tick.saturating_sub(self.match_epoch);
+        if self.match_clock.phase_at(mt) != crate::r#match::MatchPhase::Teleop {
             return true;
         }
         let b = self.match_clock.config.bounds();
-        let teleop_t = tick as f32 / crate::r#match::TICK_HZ - b[1];
+        let teleop_t = mt as f32 / crate::r#match::TICK_HZ - b[1];
         let window = (teleop_t / self.match_clock.config.shift_s) as usize;
         let winner = self.auto_winner();
         (window % 2 == 0) == (alliance == winner)
+    }
+
+    /// Start the match: staging ends, the clock begins at auto (issue:
+    /// match-ops lifecycle). disabled_s stays whatever config says — the
+    /// epoch makes clock time start now.
+    pub fn start_match(&mut self) {
+        self.match_epoch = self.tick;
     }
 
     /// public wrapper for viz/control

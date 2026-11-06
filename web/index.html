@@ -25,8 +25,9 @@
       <button data-p="endgame">endgame</button>
       <button data-p="complete">end</button>
       <button id="c-clear">clock</button><br>
-      <button id="c-pause">pause</button>
       <button id="c-reset">reset</button>
+      <button id="c-start" style="background:#1a7">START</button><br>
+      <span id="c-shift" style="color:#8ab;font-size:11px"></span>
     </div>
     <script>
       const cws = new WebSocket("ws://127.0.0.1:9772");
@@ -35,6 +36,9 @@
         document.getElementById("c-phase").textContent = s.phase;
         document.getElementById("c-time").textContent = s.time_remaining.toFixed(0) + "s";
         document.getElementById("c-score").textContent = s.scores.join("–");
+        const sh = document.getElementById("c-shift");
+        if (s.hub_active !== undefined && s.hub_active !== null)
+          sh.textContent = (s.hub_active === 0 ? "RED" : "BLUE") + " hub active";
       };
       for (const b of document.querySelectorAll("#ctrl button[data-p]"))
         b.onclick = () => cws.send(JSON.stringify({op:"set_phase", phase:b.dataset.p}));
@@ -48,6 +52,10 @@
       };
       document.getElementById("c-reset").onclick =
         () => cws.send(JSON.stringify({op:"reset"}));
+      document.getElementById("c-start").onclick = () => {
+        cws.send(JSON.stringify({op:"reset"}));
+        setTimeout(() => cws.send(JSON.stringify({op:"start_match"})), 300);
+      };
     </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
