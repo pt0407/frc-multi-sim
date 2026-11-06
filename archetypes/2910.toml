@@ -1,0 +1,15 @@
+name = "2910-hightide"
+# real 2910 robot GLB — Z-up Onshape export, x90 to upright
+mass = 60.0
+half_extents = [0.53, 0.64, 0.32]
+max_force = 1200.0
+drivetrain = "swerve"
+
+[model]
+url = "/robot-assets/2910.gltf"
+scale = 1.0
+offset = [-0.13, 0.0, 0.0]
+rotation_deg = [90.0, 0.0, 0.0]
+
+[sensors]
+preset = "competition"
