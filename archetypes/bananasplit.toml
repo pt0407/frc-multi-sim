@@ -1,12 +1,14 @@
 name = "bananasplit"
-half_extents = [0.45, 0.35, 0.45]
-mass = 55.0
+mass = 60.0
+half_extents = [0.45, 0.40, 0.45]
+max_force = 1200.0
+drivetrain = "swerve"
 
 [model]
 url = "/robot-assets/bananasplit.glb"
 scale = 0.5
-offset = [0.0, 0.0, 0.0]
-rotation_deg = [0.0, 0.0, 0.0]
+offset = [-0.30, 0.0, 0.05]
+rotation_deg = [0.0, -90.0, 0.0]
 
 [sensors]
-noise = "clean"
+preset = "competition"
