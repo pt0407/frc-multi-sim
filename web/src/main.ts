@@ -110,6 +110,7 @@ camera.upperRadiusLimit = 80;
 const ROBOT_COLORS = [Color3.Red(), new Color3(0.2, 0.4, 1), new Color3(0, 0.8, 0.4), Color3.Yellow()];
 
 const robots = new Map<number, TransformNode>();
+const mechArms = new Map<number, Mesh>(); // robot id -> arm mesh (animated by mech_angles)
 const robotCfgs = new Map<number, RobotCfg>();
 const modelTried = new Set<number>();
 const pieces: AbstractMesh[] = [];
@@ -358,6 +359,26 @@ function connect() {
         banner.style.color = "#fff";
       }
     }
+    // animated mechanism arms — one bar per robot pivoting at the
+    // chassis front edge; angle comes from mech_angles (issue #57/#61)
+    (msg as any).mech_angles?.forEach((a: number | null, id: number) => {
+      if (a == null) return;
+      let arm = mechArms.get(id);
+      const root = robots.get(id);
+      if (!arm && root) {
+        arm = MeshBuilder.CreateBox(`mech-${id}`, { width: 0.7, height: 0.05, depth: 0.08 }, scene);
+        arm.parent = root;
+        arm.position = new Vector3(0.35, 0.15, 0);
+        const m = new StandardMaterial(`mechm-${id}`, scene);
+        m.diffuseColor = new Color3(1.0, 0.8, 0.2);
+        arm.material = m;
+        mechArms.set(id, arm);
+      }
+      if (arm) {
+        arm.rotation.z = a; // joint angle from physics
+        arm.setEnabled(true);
+      }
+    });
     // telemetry rail (issue: match-ops UI): per-robot live stats
     {
       const rows: string[] = [`<b>tick ${(msg as any).tick ?? "?"} ${(msg as any).match_state ?? ""} ${((msg as any).match_time ?? 0).toFixed(0)}s</b>`,
