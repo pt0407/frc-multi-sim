@@ -101,10 +101,11 @@ camera.lowerRadiusLimit = 5;
 camera.upperRadiusLimit = 80;
 {
   const hemi = new HemisphericLight("light", new Vector3(0.3, 1, 0.2), scene);
-  hemi.intensity = 0.9;
+  hemi.intensity = 1.4;
   const dir = new DirectionalLight("dir", new Vector3(-0.4, -1, 0.3), scene);
-  dir.intensity = 0.6;
+  dir.intensity = 1.0;
   dir.position = new Vector3(4, 12, -3);
+  scene.ambientColor = new Color3(0.35, 0.35, 0.4);
 }
 
 const ROBOT_COLORS = [Color3.Red(), new Color3(0.2, 0.4, 1), new Color3(0, 0.8, 0.4), Color3.Yellow()];
@@ -396,7 +397,7 @@ function connect() {
       const m = pieceMesh(i);
       if (i < plist.length) {
         m.setEnabled(true);
-        m.position.set(plist[i][0], plist[i][1] + 0.15, plist[i][2]);
+        m.position.set(plist[i][0], plist[i][1], plist[i][2]);
       } else {
         m.setEnabled(false);
       }
