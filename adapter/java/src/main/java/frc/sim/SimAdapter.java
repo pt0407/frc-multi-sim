@@ -1,41 +1,50 @@
-// WPILib-side adapter (issue #6): connects the real robot's motor/output
-// logic to the frc-sim NT4 bridge. Your robot code calls robotPeriodic()
-// each loop; the adapter writes /sim/cmd_fx|fz|torque and exposes sensor
-// state via getSensorState(). Requires a WPILib-NT4-capable robot project.
+// WPILib-side adapter (issue #6): bridges robot code to the sim's NT4
+// contract. Reads /sim/pose_x|z, /sim/vel_x|z, /sim/contact and writes
+// /sim/cmd_fx|fz|torque — the sim's nt_bridge turns those into physics.
 package frc.sim;
 
+import edu.wpi.first.networktables.*;
+
 public class SimAdapter {
-    private final int robotId;
-    // TODO: wire real NT4 topics once the WPILib sim is running —
-    // for now the shape matches what src/agents/nt_bridge.rs expects.
+    private final NetworkTableInstance inst;
+    private final DoubleSubscriber poseX, poseZ, velX, velZ, contact;
+    private final DoublePublisher cmdFx, cmdFz, cmdTorque;
 
     public SimAdapter(int robotId) {
-        this.robotId = robotId;
+        inst = NetworkTableInstance.getDefault();
+        // the sim runs an NT4 server on ws://127.0.0.1:5810+robotId —
+        // robot code connects as a client
+        inst.setServer("127.0.0.1", 5810 + robotId);
+        inst.startClient4("frc-sim-adapter");
+
+        NetworkTable t = inst.getTable("/sim");
+        poseX = t.getDoubleTopic("pose_x").subscribe(0.0);
+        poseZ = t.getDoubleTopic("pose_z").subscribe(0.0);
+        velX = t.getDoubleTopic("vel_x").subscribe(0.0);
+        velZ = t.getDoubleTopic("vel_z").subscribe(0.0);
+        contact = t.getDoubleTopic("contact").subscribe(0.0);
+        cmdFx = t.getDoubleTopic("cmd_fx").publish();
+        cmdFz = t.getDoubleTopic("cmd_fz").publish();
+        cmdTorque = t.getDoubleTopic("cmd_torque").publish();
     }
 
-    /// Called each robot loop. Override to drive your mechanisms.
+    /// Call each robot loop. Your control code goes in decide().
     public void robotPeriodic() {
-        double[] st = getSensorState();
-        double[] cmd = decide(st);
-        setActuator(cmd[0], cmd[1], cmd[2]);
+        double[] s = getSensorState();
+        double[] c = decide(s);
+        cmdFx.set(c[0]); cmdFz.set(c[1]); cmdTorque.set(c[2]);
     }
 
-    /// Replace with real NT4 reads: /sim/pose_x, /sim/pose_z,
-    /// /sim/vel_x, /sim/vel_z, /sim/contact — flattened doubles.
     public double[] getSensorState() {
-        return new double[5];
+        return new double[] {
+            poseX.get(), poseZ.get(), velX.get(), velZ.get(), contact.get()
+        };
     }
 
-    /// Replace with real NT4 writes: /sim/cmd_fx, /sim/cmd_fz,
-    /// /sim/cmd_torque (doubles, newtons / N*m).
-    public void setActuator(double fx, double fz, double torque) {}
-
-    /// Your control policy: sensor state -> [fx, fz, torque]. This stub
-    /// drives a simple patrol so the adapter does something real.
+    /// Stub controller: drives toward field center. Replace with real
+    /// robot logic — odometry, waypoints, mechanism commands.
     private double[] decide(double[] s) {
-        double x = s[0], z = s[1];
-        // drive toward field center; real code reads waypoints/odometry
         double k = 600.0;
-        return new double[] { -k * x, -k * z, 0.0 };
+        return new double[] { -k * s[0], -k * s[1], 0.0 };
     }
 }
