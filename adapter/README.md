@@ -10,7 +10,7 @@ protocol a real robot's NetworkTables uses:
 ## Wiring
 
 ```java
-SimAdapter adapter = new SimAdapter(robotId);  // connects to 127.0.0.1:5810+id
+SimAdapter adapter = new SimAdapter(robotId);  // hosts NT4 server on :5810
 // in Robot.robotPeriodic():
 adapter.robotPeriodic();
 ```

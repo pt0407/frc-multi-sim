@@ -12,10 +12,9 @@ public class SimAdapter {
 
     public SimAdapter(int robotId) {
         inst = NetworkTableInstance.getDefault();
-        // the sim runs an NT4 server on ws://127.0.0.1:5810+robotId —
-        // robot code connects as a client
-        inst.setServer("127.0.0.1", 5810 + robotId);
-        inst.startClient4("frc-sim-adapter");
+        // robot code hosts the NT4 server (default port 5810); the sim's
+        // nt_bridge connects to us (issue #6)
+        inst.startServer("nt.json");
 
         NetworkTable t = inst.getTable("/sim");
         poseX = t.getDoubleTopic("pose_x").subscribe(0.0);
