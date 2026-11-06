@@ -3,6 +3,11 @@
   "loop_actions": false,
   "actions": [
     {
+      "type": "mech",
+      "joint": 0,
+      "target": -0.6
+    },
+    {
       "type": "goto",
       "x": -3.0900000000000003,
       "z": 0.0
@@ -79,6 +84,11 @@
     },
     {
       "type": "hold"
+    },
+    {
+      "type": "mech",
+      "joint": 0,
+      "target": 0.0
     }
   ]
 }

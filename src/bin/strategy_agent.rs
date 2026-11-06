@@ -52,6 +52,9 @@ enum Action {
     Intake { active: bool },
     Wait { seconds: f32 },
     Shoot(ShotParams),
+    /// drive a mechanism joint to a target (issue #57): joint = index
+    /// into the robot's [[mech]] list, target = angle/extent
+    Mech { joint: usize, target: f32 },
     Hold,
 }
 
@@ -89,6 +92,7 @@ async fn main() -> Result<()> {
 
     let mut idx = 0usize;
     let mut intake_on = false;
+    let mut mech_last: Option<frc_sim_m0::MechCommand> = None;
     let mut wait_until: Option<u64> = None;
     let mut done = false;
 
@@ -119,6 +123,20 @@ async fn main() -> Result<()> {
                         idx += 1;
                     }
                 }
+                Some(Action::Mech { joint, target }) => {
+                    let m = frc_sim_m0::MechCommand { joint: *joint, target: *target };
+                    mech_last = Some(m);
+                    let act = ActuatorFrame {
+                        force: [0.0, 0.0], torque: 0.0, modules: None,
+                        intake_active: intake_on, shoot: None, mech: Some(m),
+                    };
+                    sink.send(Message::Text(
+                        serde_json::to_string(&AgentMsg::Actuator(act)).unwrap().into(),
+                    ))
+                    .await?;
+                    idx += 1;
+                    continue;
+                }
                 Some(Action::Shoot(p)) => {
                     let act = ActuatorFrame {
                         force: [0.0, 0.0],
@@ -131,7 +149,7 @@ async fn main() -> Result<()> {
                             turret_yaw: p.turret_yaw,
                             launch_height: p.launch_height,
                         }),
-                        mech: None,
+                        mech: mech_last,
                     };
                     sink.send(Message::Text(
                         serde_json::to_string(&AgentMsg::Actuator(act)).unwrap().into(),
@@ -174,7 +192,7 @@ async fn main() -> Result<()> {
                 modules: None,
                 intake_active: intake_on,
                 shoot: None,
-                mech: None,
+                mech: mech_last,
             }))
             .unwrap()
             .into(),
