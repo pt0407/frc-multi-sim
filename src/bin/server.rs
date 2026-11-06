@@ -490,7 +490,7 @@ async fn main() -> Result<()> {
                                 && world.match_clock.phase_at(tick)
                                     == frc_sim_m0::r#match::MatchPhase::Teleop
                             {
-                                Some(if world.match_clock.hub_active(0, tick) {
+                                Some(if world.hub_active_for_viz(0, tick) {
                                     0
                                 } else {
                                     1

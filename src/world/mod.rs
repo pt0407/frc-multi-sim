@@ -561,7 +561,7 @@ impl World {
                 let a = (hub.alliance as usize).min(self.scores.len() - 1);
                 // REBUILT hub shifts: a hub only scores while its alliance's
                 // window is active (always active when shift_s == 0)
-                if !self.match_clock.hub_active(a, self.tick) {
+                if !self.hub_active_at(a, self.tick) {
                     continue;
                 }
                 self.scores[a] += 1;
@@ -587,6 +587,34 @@ impl World {
 
     /// Arm joint angle for mechanism telemetry/tests (issue #57 spike).
     /// `None` when the robot has no `[mech]`.
+    /// REBUILT shift order: the alliance that scored more in AUTO owns the
+    /// first teleop window (ties -> alliance 0). Captured once at the
+    /// auto->teleop boundary.
+    pub fn auto_winner(&self) -> usize {
+        let sa = self.score_by_phase[0].auto;
+        let sb = self.score_by_phase[1].auto;
+        if sb > sa { 1 } else { 0 }
+    }
+
+    fn hub_active_at(&self, alliance: usize, tick: u64) -> bool {
+        if self.match_clock.config.shift_s <= 0.0 {
+            return true;
+        }
+        if self.match_clock.phase_at(tick) != crate::r#match::MatchPhase::Teleop {
+            return true;
+        }
+        let b = self.match_clock.config.bounds();
+        let teleop_t = tick as f32 / crate::r#match::TICK_HZ - b[1];
+        let window = (teleop_t / self.match_clock.config.shift_s) as usize;
+        let winner = self.auto_winner();
+        (window % 2 == 0) == (alliance == winner)
+    }
+
+    /// public wrapper for viz/control
+    pub fn hub_active_for_viz(&self, alliance: usize, tick: u64) -> bool {
+        self.hub_active_at(alliance, tick)
+    }
+
     /// Stage preloaded fuel (game manual 6.3.4): each robot starts
     /// holding `preload_fuel` pieces.
     pub fn apply_preload(&mut self) {
@@ -666,9 +694,7 @@ impl World {
             match_time: self.time_remaining_at_tick(tick),
             vision_pose: None,
             mech_angle: self.mech_angle(robot),
-            hub_active: self
-                .match_clock
-                .hub_active(robot % self.scores.len(), tick),
+            hub_active: self.hub_active_at(robot % self.scores.len(), tick),
         };
         // noise layer: no-op (and zero RNG draws) when disabled
         let true_pos = frame.position;

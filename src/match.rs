@@ -203,7 +203,7 @@ impl MatchConfig {
     }
 
     /// Phase-boundary offsets in seconds, cumulative from t=0.
-    fn bounds(&self) -> [f32; 4] {
+    pub fn bounds(&self) -> [f32; 4] {
         let d = self.disabled_s;
         [d, d + self.auto_s, d + self.auto_s + self.teleop_s,
          d + self.auto_s + self.teleop_s + self.endgame_s]

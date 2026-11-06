@@ -85,7 +85,16 @@ pub fn config_msg(field: &FieldSpec, specs: &[RobotSpec]) -> String {
                 json!({
                     "id": id,
                     "half_extents": s.half_extents,
-                    "model": s.model,
+                    "model": s.model.as_ref().cloned().or_else(|| {
+                        // bare-minimum default: KitBot for every robot that
+                        // doesn't declare its own CAD (issue #43 v2)
+                        Some(crate::archetype::ModelSpec {
+                            url: "/robot-assets/kitbot-2026.glb".into(),
+                            scale: 1.0,
+                            offset: [-0.30, 0.0, 0.05],
+                            rotation_deg: [-90.0, 0.0, 90.0],
+                        })
+                    }),
                     "intake": s.intake,
                 })
             })
