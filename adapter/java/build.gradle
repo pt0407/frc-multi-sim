@@ -1,0 +1,12 @@
+plugins { id 'java' }
+group = 'frc.sim'
+repositories {
+    mavenCentral()
+    maven { url 'https://frcmaven.wpi.edu/artifactory/release/' }
+}
+dependencies {
+    // WPILib ntcore — real NetworkTables 4 client. This is the same
+    // library robot code uses, so /sim/* topics are reachable from any
+    // WPILib-side program.
+    implementation files('libs/ntcore-java.jar')
+}
