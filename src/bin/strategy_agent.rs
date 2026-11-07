@@ -102,8 +102,11 @@ async fn main() -> Result<()> {
             continue;
         };
 
-        // advance the action queue
-        if !done {
+        // advance the action queue — only while the match phase is
+        // enabled (auto/teleop/endgame). Commands sent during disabled
+        // are dropped by the world, which silently eats scripted shots
+        // fired before START (observed: 2910 auto, held stayed 8).
+        if !done && s.match_state.enabled() {
             match strat.actions.get(idx) {
                 Some(Action::Goto { x, z }) => {
                     let d = ((x - s.position[0]).powi(2) + (z - s.position[2]).powi(2)).sqrt();
