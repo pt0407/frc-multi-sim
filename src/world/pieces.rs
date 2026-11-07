@@ -168,8 +168,11 @@ pub fn spawn_table(
             let w = (rng.next_u64() >> 40) as f32 / ((1u64 << 24) as f32);
             let x = z.center[0] + u * z.half_extents[0];
             let zz = z.center[1] + v * z.half_extents[1];
-            // mound depth: mostly floor, ~1/3 lifted into second layer
-            let y = FUEL_RADIUS + 0.02 + w * FUEL_RADIUS * 1.8;
+            // visible mound: y rises with distance from center edge —
+            // real pour piles are deeper in the middle, ~2-4 balls deep
+            let edge = (u.abs().max(v.abs()) * 2.0 - 1.0).max(0.0); // 0 center -> 1 edge
+            let depth = (1.0 - edge) * FUEL_RADIUS * 3.2 + w * FUEL_RADIUS * 1.2;
+            let y = FUEL_RADIUS + 0.02 + depth;
             out.push(spawn_piece(bodies, colliders, [x, y, zz], [0.0; 3]));
         }
     }
