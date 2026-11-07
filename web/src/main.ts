@@ -89,7 +89,7 @@ const telemEl = document.getElementById("telem")!;
 function hideLoad() { loadEl.classList.add("done"); }
 const telem = telemEl;
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
-const engine = new Engine(canvas, true);
+const engine = new Engine(canvas, false); // MSAA off — perf over edge smoothing
 const scene = new Scene(engine);
 scene.clearColor = new Color4(0.06, 0.07, 0.09, 1);
 
@@ -123,6 +123,7 @@ const ROBOT_COLORS = [Color3.Red(), new Color3(0.2, 0.4, 1), new Color3(0, 0.8, 
 
 const robots = new Map<number, TransformNode>();
 const mechArms = new Map<number, Mesh>(); // robot id -> arm mesh (animated by mech_angles)
+let telemTick = 0;
 const intakeRollers = new Map<number, Mesh>(); // spinning intake roller
 const flywheels = new Map<number, Mesh>(); // shooter flywheel disc
 const shotFlash = new Map<number, { mesh: Mesh; ttl: number }>();
@@ -131,7 +132,7 @@ let intakeOn: boolean[] = [];
 const robotCfgs = new Map<number, RobotCfg>();
 const modelTried = new Set<number>();
 const pieces: AbstractMesh[] = [];
-const MAX_PIECES = 200;
+const MAX_PIECES = 600;
 
 // all 504 pieces are instances of one source mesh — a single draw call
 // instead of per-mesh geometry/material (viz perf)
@@ -203,6 +204,7 @@ async function buildPrimitives() {
   if (fieldCfg.glb_url) {
     try {
       const result = await SceneLoader.ImportMeshAsync("", location.origin, fieldCfg.glb_url, scene);
+    for (const m of result.meshes) m.freezeWorldMatrix();
       for (const mesh of result.meshes) {
         if (/Fuel/i.test(mesh.name)) mesh.setEnabled(false);
       }
@@ -250,6 +252,15 @@ async function buildPrimitives() {
     }
     mesh.position = new Vector3(o.pos[0], o.pos[1], o.pos[2]);
     mesh.material = om;
+    mesh.freezeWorldMatrix();
+  }
+  // static geometry never moves — freeze world matrices so Babylon
+  // skips per-frame matrix recompute (500+ meshes get expensive)
+  ground.freezeWorldMatrix();
+  for (const m of scene.meshes) {
+    if (m.name === "wall" || m.name === "obstacle" || m.name === "field") {
+      m.freezeWorldMatrix();
+    }
   }
 }
 
@@ -446,8 +457,10 @@ function connect() {
         arm.setEnabled(true);
       }
     });
-    // telemetry rail (issue: match-ops UI): per-robot live stats
-    {
+    // telemetry rail (issue: match-ops UI): per-robot live stats,
+    // throttled — rebuilding the HTML every 50 Hz tick is wasted work
+    telemTick = (telemTick + 1) % 10;
+    if (telemTick === 0) {
       const rows: string[] = [`<b>tick ${(msg as any).tick ?? "?"} ${(msg as any).match_state ?? ""} ${((msg as any).match_time ?? 0).toFixed(0)}s</b>`,
         `score ${(msg as any).scores?.join("–") ?? "—"}`];
       robots.forEach((node, id) => {
