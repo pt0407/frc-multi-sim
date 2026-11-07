@@ -163,7 +163,10 @@ pub fn spawn_table(
         // positions with zero overlap and zero velocity — pieces spawn
         // AT REST, so nothing pops or scatters. Jittered grid over the
         // footprint; the 504-piece count fits in roughly one layer.
-        let pitch = FUEL_RADIUS * 2.35; // ~0.18 m spacing, no overlap
+        // pitch sized to the zone: fit `count` pieces in ~one layer
+        // (FuelSim staging) — small depots still space out cleanly.
+        let area = z.half_extents[0] * 2.0 * z.half_extents[1] * 2.0;
+        let pitch = (area / z.count as f32).sqrt().max(FUEL_RADIUS * 2.1);
         let nx = ((z.half_extents[0] * 2.0) / pitch).floor().max(1.0) as usize;
         let nz = ((z.half_extents[1] * 2.0) / pitch).floor().max(1.0) as usize;
         let mut i = 0usize;
