@@ -432,7 +432,7 @@ pub fn build_arena(
                 };
                 // trapezoid cross-section: flat plateau on top (real bumps
                 // aren't knife edges — the chassis needs a seat to crest)
-                let px = ax * 0.3;
+                let px = ax * 0.55;
                 let pts: Vec<rapier3d::na::Point3<f32>> = [
                     [pos[0]-ax, pos[1], pos[2]-az], [pos[0]-ax, pos[1], pos[2]+az],
                     [pos[0]+ax, pos[1], pos[2]-az], [pos[0]+ax, pos[1], pos[2]+az],
