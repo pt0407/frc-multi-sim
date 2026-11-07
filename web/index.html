@@ -100,13 +100,19 @@
       } else sh.className = "";
       $("banner").style.display = s.phase === "disabled" ? "block" : "none";
     };
+    const dismissLoad = () => {
+      const l = document.getElementById("load");
+      if (l) l.classList.add("done");
+      const h = document.getElementById("home");
+      if (h) h.style.display = "none";
+    };
     document.getElementById("h-match").onclick = () => {
-      document.getElementById("home").style.display = "none";
+      dismissLoad();
       cws.send(JSON.stringify({op:"reset"}));
       setTimeout(() => cws.send(JSON.stringify({op:"start_match"})), 300);
     };
     document.getElementById("h-practice").onclick = () => {
-      document.getElementById("home").style.display = "none";
+      dismissLoad();
       cws.send(JSON.stringify({op:"reset"}));
     };
     $("c-start").onclick = () => cws.send(JSON.stringify({op:"start_match"}));
