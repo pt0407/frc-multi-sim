@@ -11,6 +11,7 @@
 //! a pure function of the TOML.
 use anyhow::{bail, Context, Result};
 use rapier3d::prelude::*;
+use rapier3d::na::{UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -33,6 +34,10 @@ fn default_ground_friction() -> f32 {
 fn default_ground_restitution() -> f32 {
     0.08
 }
+fn default_slope_dir() -> [f32; 2] {
+    [1.0, 0.0]
+}
+
 fn default_wall_friction() -> f32 {
     0.82
 }
@@ -76,6 +81,22 @@ pub enum ObstacleSpec {
     Box {
         pos: [f32; 3],
         half_extents: [f32; 3],
+        #[serde(default = "default_wall_friction")]
+        friction: f32,
+        #[serde(default)]
+        restitution: f32,
+        #[serde(default)]
+        name: Option<String>,
+    },
+    /// drivable wedge (REBUILT bumps are ramps, not walls). `slope_dir`
+    /// picks which axis the ramp rises along (+1/-1 on x or z); the
+    /// collider is a cuboid tilted about the perpendicular axis.
+    Ramp {
+        pos: [f32; 3],
+        half_extents: [f32; 3],
+        /// slope direction: [x, z] unit-ish vector (e.g. [1,0], [-1,0], [0,1])
+        #[serde(default = "default_slope_dir")]
+        slope_dir: [f32; 2],
         #[serde(default = "default_wall_friction")]
         friction: f32,
         #[serde(default)]
@@ -292,7 +313,20 @@ impl FieldSpec {
                     check_extents(half_extents, &format!("{what}.half_extents"))?;
                     check_material(*friction, *restitution, &what)?;
                 }
-                ObstacleSpec::Cylinder {
+                ObstacleSpec::Ramp {
+                pos,
+                half_extents,
+                slope_dir,
+                friction,
+                restitution,
+                ..
+            } => {
+                check_pos3(pos, &format!("{what}.pos"))?;
+                check_finite(slope_dir[0], &format!("{what}.slope_dir"))?;
+                check_finite(slope_dir[1], &format!("{what}.slope_dir"))?;
+                check_material(*friction, *restitution, &what)?;
+            }
+            ObstacleSpec::Cylinder {
                     pos,
                     radius,
                     half_height,
@@ -378,6 +412,34 @@ pub fn build_arena(
                 .translation(vector![pos[0], pos[1], pos[2]])
                 .friction(*friction)
                 .restitution(*restitution),
+            ObstacleSpec::Ramp {
+                pos,
+                half_extents,
+                slope_dir,
+                friction,
+                restitution,
+                ..
+            } => {
+                // tilt about the axis perpendicular to the slope so the
+                // top face becomes a ramp surface
+                let angle = (half_extents[1] / half_extents[0].max(half_extents[2])).atan();
+                let rot = if slope_dir[0].abs() > slope_dir[1].abs() {
+                    UnitQuaternion::from_axis_angle(
+                        &Vector3::z_axis(),
+                        angle * -slope_dir[0].signum(),
+                    )
+                } else {
+                    UnitQuaternion::from_axis_angle(
+                        &Vector3::x_axis(),
+                        angle * slope_dir[1].signum(),
+                    )
+                };
+                ColliderBuilder::cuboid(half_extents[0], half_extents[1], half_extents[2])
+                    .translation(vector![pos[0], pos[1], pos[2]])
+                    .rotation(rot.scaled_axis())
+                    .friction(*friction)
+                    .restitution(*restitution)
+            }
             ObstacleSpec::Cylinder {
                 pos,
                 radius,

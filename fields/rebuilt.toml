@@ -108,31 +108,39 @@ friction     = 0.7
 # BUMP — GE-261xx assembly. Floor strip between each hub and trench,
 # spanning z ≈ 0.59..2.75 at x ≈ ±3.645, ~0.16 m tall.
 [[obstacles]]
-kind         = "box"
+kind         = "ramp"
 name         = "bump-s1"
 pos          = [-3.645, 0.085, 1.67]
 half_extents = [0.35, 0.085, 1.08]
+slope_dir    = [1.0, 0.0]
+friction     = 0.8
 friction     = 0.8
 
 [[obstacles]]
-kind         = "box"
+kind         = "ramp"
 name         = "bump-n1"
 pos          = [-3.645, 0.085, -1.67]
 half_extents = [0.35, 0.085, 1.08]
+slope_dir    = [1.0, 0.0]
+friction     = 0.8
 friction     = 0.8
 
 [[obstacles]]
-kind         = "box"
+kind         = "ramp"
 name         = "bump-s2"
 pos          = [3.645, 0.085, 1.67]
 half_extents = [0.35, 0.085, 1.08]
+slope_dir    = [1.0, 0.0]
+friction     = 0.8
 friction     = 0.8
 
 [[obstacles]]
-kind         = "box"
+kind         = "ramp"
 name         = "bump-n2"
 pos          = [3.645, 0.085, -1.67]
 half_extents = [0.35, 0.085, 1.08]
+slope_dir    = [1.0, 0.0]
+friction     = 0.8
 friction     = 0.8
 
 # TOWER — GE-265xx assembly. Climbable structure against each alliance
