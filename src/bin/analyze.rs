@@ -71,6 +71,9 @@ struct RobotBrain {
     mech_last: Option<MechCommand>,
     wait_until: Option<u64>,
     done: bool,
+    best_d: f32,
+    stall_tick: u64,
+    recover_until: u64,
 }
 
 impl RobotBrain {
@@ -79,7 +82,7 @@ impl RobotBrain {
             &std::fs::read_to_string(path)
                 .with_context(|| format!("read {}", path.display()))?,
         )?;
-        Ok(Self { strat, idx: 0, intake_on: false, mech_last: None, wait_until: None, done: false })
+        Ok(Self { strat, idx: 0, intake_on: false, mech_last: None, wait_until: None, done: false, best_d: f32::MAX, stall_tick: 0, recover_until: 0 })
     }
 
     /// Mirror of strategy_agent's per-tick action interpreter; returns the
@@ -132,12 +135,26 @@ impl RobotBrain {
             Some(Action::Goto { x, z }) if !self.done => {
                 let ex = x - s.position[0];
                 let ez = z - s.position[2];
-                let mut fx = 300.0 * ex - 60.0 * s.linvel[0];
-                let mut fz = 300.0 * ez - 60.0 * s.linvel[2];
+                let d = (ex * ex + ez * ez).sqrt();
+                if d < self.best_d - 0.05 {
+                    self.best_d = d;
+                    self.stall_tick = s.tick;
+                } else if s.tick - self.stall_tick > 1200 && s.tick >= self.recover_until {
+                    self.recover_until = s.tick + 600;
+                    self.stall_tick = s.tick;
+                    self.best_d = f32::MAX;
+                }
+                let reversing = s.tick < self.recover_until;
+                let (mut fx, mut fz) = if reversing {
+                    (-ex / d.max(1e-3), -ez / d.max(1e-3))
+                } else {
+                    (300.0 * ex - 60.0 * s.linvel[0], 300.0 * ez - 60.0 * s.linvel[2])
+                };
                 let m = (fx * fx + fz * fz).sqrt();
-                if m > max_force {
-                    fx *= max_force / m;
-                    fz *= max_force / m;
+                let cap = if reversing { max_force * 0.7 } else { max_force };
+                if m > cap {
+                    fx *= cap / m;
+                    fz *= cap / m;
                 }
                 (fx, fz)
             }

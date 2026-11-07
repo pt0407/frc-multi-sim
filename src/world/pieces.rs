@@ -141,7 +141,7 @@ pub fn spawn_piece(
             // Max so fuel pairs resolve to FIELD_COR vs field colliders and
             // FUEL_COR vs fuel/fuel; see module docs for the approximation.
             .restitution_combine_rule(CoefficientCombineRule::Max)
-            .friction(0.6)
+            .friction(0.15)
             .build(),
         body,
         bodies,

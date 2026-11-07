@@ -95,6 +95,12 @@ async fn main() -> Result<()> {
     let mut mech_last: Option<frc_sim_m0::MechCommand> = None;
     let mut wait_until: Option<u64> = None;
     let mut done = false;
+    // stall recovery: if the goto target stops getting closer for ~3s
+    // (physics ticks), back away from it for ~1.5s — real drivers
+    // un-wedge from ball walls / bump faces the same way.
+    let mut best_d = f32::MAX;
+    let mut stall_tick = 0u64;
+    let mut recover_until = 0u64;
 
     while let Some(Ok(msg)) = stream.next().await {
         let Message::Text(txt) = msg else { continue };
@@ -176,12 +182,27 @@ async fn main() -> Result<()> {
             Some(Action::Goto { x, z }) if !done => {
                 let ex = x - s.position[0];
                 let ez = z - s.position[2];
-                let mut fx = 300.0 * ex - 60.0 * s.linvel[0];
-                let mut fz = 300.0 * ez - 60.0 * s.linvel[2];
+                let d = (ex * ex + ez * ez).sqrt();
+                if d < best_d - 0.05 {
+                    best_d = d;
+                    stall_tick = s.tick;
+                } else if s.tick - stall_tick > 1200 && s.tick >= recover_until {
+                    // wedged — reverse away from the target to un-wedge
+                    recover_until = s.tick + 600;
+                    stall_tick = s.tick;
+                    best_d = f32::MAX;
+                }
+                let reversing = s.tick < recover_until;
+                let (mut fx, mut fz) = if reversing {
+                    (-ex / d.max(1e-3), -ez / d.max(1e-3))
+                } else {
+                    (300.0 * ex - 60.0 * s.linvel[0], 300.0 * ez - 60.0 * s.linvel[2])
+                };
                 let m = (fx * fx + fz * fz).sqrt();
-                if m > args.max_force {
-                    fx *= args.max_force / m;
-                    fz *= args.max_force / m;
+                let cap = if reversing { args.max_force * 0.7 } else { args.max_force };
+                if m > cap {
+                    fx *= cap / m;
+                    fz *= cap / m;
                 }
                 (fx, fz)
             }

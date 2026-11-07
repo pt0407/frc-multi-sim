@@ -1,125 +1,37 @@
 {
-  "name": "2910-auto-red",
+  "name": "2910-cycle-red",
   "loop_actions": true,
   "actions": [
-    {
-      "type": "shoot",
-      "launch_velocity": 6.5,
-      "hood_angle": 1.35,
-      "turret_yaw": 0.0,
-      "launch_height": 0.6
-    },
-    {
-      "type": "wait",
-      "seconds": 0.4
-    },
-    {
-      "type": "shoot",
-      "launch_velocity": 6.5,
-      "hood_angle": 1.35,
-      "turret_yaw": 0.0,
-      "launch_height": 0.6
-    },
-    {
-      "type": "wait",
-      "seconds": 0.4
-    },
-    {
-      "type": "shoot",
-      "launch_velocity": 6.5,
-      "hood_angle": 1.35,
-      "turret_yaw": 0.0,
-      "launch_height": 0.6
-    },
-    {
-      "type": "wait",
-      "seconds": 0.4
-    },
-    {
-      "type": "shoot",
-      "launch_velocity": 6.5,
-      "hood_angle": 1.35,
-      "turret_yaw": 0.0,
-      "launch_height": 0.6
-    },
-    {
-      "type": "wait",
-      "seconds": 0.5
-    },
-    {
-      "type": "goto",
-      "x": -2.5,
-      "z": 1.0
-    },
-    {
-      "type": "goto",
-      "x": -0.8,
-      "z": 0.0
-    },
-    {
-      "type": "intake",
-      "active": true
-    },
-    {
-      "type": "goto",
-      "x": -1.5,
-      "z": 0.0
-    },
-    {
-      "type": "wait",
-      "seconds": 2.0
-    },
-    {
-      "type": "goto",
-      "x": -0.8,
-      "z": 0.0
-    },
-    {
-      "type": "goto",
-      "x": -2.5,
-      "z": 1.0
-    },
-    {
-      "type": "goto",
-      "x": -4.5,
-      "z": 0.0
-    },
-    {
-      "type": "intake",
-      "active": false
-    },
-    {
-      "type": "shoot",
-      "launch_velocity": 6.5,
-      "hood_angle": 1.35,
-      "turret_yaw": 0.0,
-      "launch_height": 0.6
-    },
-    {
-      "type": "wait",
-      "seconds": 0.4
-    },
-    {
-      "type": "shoot",
-      "launch_velocity": 6.5,
-      "hood_angle": 1.35,
-      "turret_yaw": 0.0,
-      "launch_height": 0.6
-    },
-    {
-      "type": "wait",
-      "seconds": 0.4
-    },
-    {
-      "type": "shoot",
-      "launch_velocity": 6.5,
-      "hood_angle": 1.35,
-      "turret_yaw": 0.0,
-      "launch_height": 0.6
-    },
-    {
-      "type": "wait",
-      "seconds": 0.3
-    }
+    { "type": "shoot", "launch_velocity": 6.5, "hood_angle": 1.35, "turret_yaw": 0.0, "launch_height": 0.6 },
+    { "type": "wait", "seconds": 0.4 },
+    { "type": "shoot", "launch_velocity": 6.5, "hood_angle": 1.35, "turret_yaw": 0.0, "launch_height": 0.6 },
+    { "type": "wait", "seconds": 0.4 },
+    { "type": "shoot", "launch_velocity": 6.5, "hood_angle": 1.35, "turret_yaw": 0.0, "launch_height": 0.6 },
+    { "type": "wait", "seconds": 0.4 },
+    { "type": "shoot", "launch_velocity": 6.5, "hood_angle": 1.35, "turret_yaw": 0.0, "launch_height": 0.6 },
+    { "type": "wait", "seconds": 0.5 },
+    { "type": "goto", "x": -5.2, "z": 3.4 },
+    { "type": "goto", "x": -2.0, "z": 3.4 },
+    { "type": "goto", "x": -1.2, "z": 0.8 },
+    { "type": "intake", "active": true },
+    { "type": "goto", "x": -0.6, "z": -0.6 },
+    { "type": "wait", "seconds": 1.5 },
+    { "type": "goto", "x": -1.2, "z": 0.8 },
+    { "type": "intake", "active": false },
+    { "type": "goto", "x": -2.2, "z": 1.5 },
+    { "type": "goto", "x": -4.8, "z": 1.5 },
+    { "type": "goto", "x": -4.7, "z": 0.3 },
+    { "type": "shoot", "launch_velocity": 6.5, "hood_angle": 1.35, "turret_yaw": 0.0, "launch_height": 0.6 },
+    { "type": "wait", "seconds": 0.4 },
+    { "type": "shoot", "launch_velocity": 6.5, "hood_angle": 1.35, "turret_yaw": 0.0, "launch_height": 0.6 },
+    { "type": "wait", "seconds": 0.4 },
+    { "type": "shoot", "launch_velocity": 6.5, "hood_angle": 1.35, "turret_yaw": 0.0, "launch_height": 0.6 },
+    { "type": "wait", "seconds": 0.4 },
+    { "type": "shoot", "launch_velocity": 6.5, "hood_angle": 1.35, "turret_yaw": 0.0, "launch_height": 0.6 },
+    { "type": "wait", "seconds": 0.4 },
+    { "type": "shoot", "launch_velocity": 6.5, "hood_angle": 1.35, "turret_yaw": 0.0, "launch_height": 0.6 },
+    { "type": "wait", "seconds": 0.4 },
+    { "type": "shoot", "launch_velocity": 6.5, "hood_angle": 1.35, "turret_yaw": 0.0, "launch_height": 0.6 },
+    { "type": "wait", "seconds": 0.5 }
   ]
 }
