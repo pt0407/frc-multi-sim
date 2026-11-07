@@ -586,6 +586,10 @@ impl World {
 
             // intake capture
             let mut captured = false;
+            if std::env::var("DEBUG_INTAKE").is_ok() && !robots.iter().all(|r| r.is_none()) {
+                static mut N: u32 = 0;
+                unsafe { N += 1; if N % 400 == 0 { eprintln!("intake check: robots={:?} piece={:?}", robots.iter().map(|r| r.is_some()).collect::<Vec<_>>(), pos); } }
+            }
             for (i, robot) in robots.iter().enumerate() {
                 if let Some((rpos, ryaw)) = robot {
                     if pieces::intake_contains(
