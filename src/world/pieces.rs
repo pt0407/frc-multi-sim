@@ -159,21 +159,26 @@ pub fn spawn_table(
 ) -> Vec<RigidBodyHandle> {
     let mut out = Vec::with_capacity(table.piece_count());
     for z in &table.zones {
-        // real staging (game manual 6.3.4.1): fuel is POURED loose into
-        // the footprint — a natural mound ~2-3 balls deep, not a grid.
-        // uniform scatter in x/z + modest y jitter to resolve packing.
+        // real staging (how FuelSim/fieldcore do it): deterministic
+        // positions with zero overlap and zero velocity — pieces spawn
+        // AT REST, so nothing pops or scatters. Jittered grid over the
+        // footprint; the 504-piece count fits in roughly one layer.
+        let pitch = FUEL_RADIUS * 2.35; // ~0.18 m spacing, no overlap
+        let nx = ((z.half_extents[0] * 2.0) / pitch).floor().max(1.0) as usize;
+        let nz = ((z.half_extents[1] * 2.0) / pitch).floor().max(1.0) as usize;
+        let mut i = 0usize;
         for _ in 0..z.count as usize {
-            let u = (rng.next_u64() >> 40) as f32 / ((1u64 << 24) as f32) * 2.0 - 1.0;
-            let v = (rng.next_u64() >> 40) as f32 / ((1u64 << 24) as f32) * 2.0 - 1.0;
-            let w = (rng.next_u64() >> 40) as f32 / ((1u64 << 24) as f32);
-            let x = z.center[0] + u * z.half_extents[0];
-            let zz = z.center[1] + v * z.half_extents[1];
-            // visible mound: y rises with distance from center edge —
-            // real pour piles are deeper in the middle, ~2-4 balls deep
-            let edge = (u.abs().max(v.abs()) * 2.0 - 1.0).max(0.0); // 0 center -> 1 edge
-            let depth = (1.0 - edge) * FUEL_RADIUS * 3.2 + w * FUEL_RADIUS * 1.2;
-            let y = FUEL_RADIUS + 0.02 + depth;
+            let col = i % nx;
+            let row = i / nx;
+            let layer = row / nz;
+            let x = z.center[0] - z.half_extents[0]
+                + pitch * (col as f32 + 0.5)
+                + if row % 2 == 1 { pitch * 0.5 } else { 0.0 }; // stagger
+            let zz = z.center[1] - z.half_extents[1]
+                + pitch * (row as f32 + 0.5);
+            let y = FUEL_RADIUS + 0.01 + layer as f32 * FUEL_RADIUS * 2.2;
             out.push(spawn_piece(bodies, colliders, [x, y, zz], [0.0; 3]));
+            i += 1;
         }
     }
     out
