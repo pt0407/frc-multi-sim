@@ -159,21 +159,17 @@ pub fn spawn_table(
 ) -> Vec<RigidBodyHandle> {
     let mut out = Vec::with_capacity(table.piece_count());
     for z in &table.zones {
-        // real staging: hex-ish grid pile inside the zone footprint.
-        // spacing >= ball diameter so balls never overlap; 2-3 layers
-        // give the loose-pile look field staff produce.
-        let pitch = FUEL_RADIUS * 2.2;      // ~0.165 m center spacing
-        let nx = ((z.half_extents[0] * 2.0) / pitch).floor().max(1.0) as usize;
-        let nz = ((z.half_extents[1] * 2.0) / pitch).floor().max(1.0) as usize;
-        for i in 0..z.count as usize {
-            let col = (i % nx) as f32;
-            let row = ((i / nx) % nz) as f32;
-            let layer = i / (nx * nz);
-            // stagger alternate rows by half a pitch (hex packing)
-            let row_off = if ((i / nx) % 2) == 1 { pitch * 0.5 } else { 0.0 };
-            let x = z.center[0] - z.half_extents[0] + pitch * (col + 0.5) + row_off;
-            let zz = z.center[1] - z.half_extents[1] + pitch * (row + 0.5);
-            let y = FUEL_RADIUS + 0.02 + layer as f32 * FUEL_RADIUS * 2.1;
+        // real staging (game manual 6.3.4.1): fuel is POURED loose into
+        // the footprint — a natural mound ~2-3 balls deep, not a grid.
+        // uniform scatter in x/z + modest y jitter to resolve packing.
+        for _ in 0..z.count as usize {
+            let u = (rng.next_u64() >> 40) as f32 / ((1u64 << 24) as f32) * 2.0 - 1.0;
+            let v = (rng.next_u64() >> 40) as f32 / ((1u64 << 24) as f32) * 2.0 - 1.0;
+            let w = (rng.next_u64() >> 40) as f32 / ((1u64 << 24) as f32);
+            let x = z.center[0] + u * z.half_extents[0];
+            let zz = z.center[1] + v * z.half_extents[1];
+            // mound depth: mostly floor, ~1/3 lifted into second layer
+            let y = FUEL_RADIUS + 0.02 + w * FUEL_RADIUS * 1.8;
             out.push(spawn_piece(bodies, colliders, [x, y, zz], [0.0; 3]));
         }
     }
