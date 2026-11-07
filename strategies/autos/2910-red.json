@@ -81,8 +81,8 @@
     },
     {
       "type": "waitheld",
-      "value": 8,
-      "timeout": 6.0
+      "value": 12,
+      "timeout": 7.0
     },
     {
       "type": "goto",
@@ -119,8 +119,8 @@
       "hood_angle": 1.35,
       "turret_yaw": 0.0,
       "launch_height": 0.6,
-      "gap": 0.45,
-      "timeout": 15.0
+      "gap": 0.18,
+      "timeout": 12.0
     },
     {
       "type": "wait",
