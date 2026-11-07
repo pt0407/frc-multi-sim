@@ -420,23 +420,26 @@ pub fn build_arena(
                 restitution,
                 ..
             } => {
-                // tilt about the axis perpendicular to the slope so the
-                // top face becomes a ramp surface
-                let angle = (half_extents[1] / half_extents[0].max(half_extents[2])).atan();
-                let rot = if slope_dir[0].abs() > slope_dir[1].abs() {
-                    UnitQuaternion::from_axis_angle(
-                        &Vector3::z_axis(),
-                        angle * -slope_dir[0].signum(),
-                    )
+                // triangular-prism wedge (REBUILT bump = speed-bump ridge):
+                // base on the floor, apex line along the long axis.
+                // half_extents[1] is the full ridge height; slope_dir picks
+                // which horizontal axis the apex line runs along.
+                let h = half_extents[1];
+                let (ax, az) = if slope_dir[0].abs() > slope_dir[1].abs() {
+                    (half_extents[0], half_extents[2])
                 } else {
-                    UnitQuaternion::from_axis_angle(
-                        &Vector3::x_axis(),
-                        angle * slope_dir[1].signum(),
-                    )
+                    (half_extents[2], half_extents[0])
                 };
-                ColliderBuilder::cuboid(half_extents[0], half_extents[1], half_extents[2])
-                    .translation(vector![pos[0], pos[1], pos[2]])
-                    .rotation(rot.scaled_axis())
+                let pts: Vec<rapier3d::na::Point3<f32>> = [
+                    [pos[0]-ax, pos[1], pos[2]-az], [pos[0]-ax, pos[1], pos[2]+az],
+                    [pos[0]+ax, pos[1], pos[2]-az], [pos[0]+ax, pos[1], pos[2]+az],
+                    [pos[0], pos[1]+h, pos[2]-az], [pos[0], pos[1]+h, pos[2]+az],
+                ]
+                .iter()
+                .map(|p| rapier3d::prelude::Point::new(p[0], p[1], p[2]))
+                .collect();
+                ColliderBuilder::convex_hull(&pts)
+                    .expect("bump wedge hull")
                     .friction(*friction)
                     .restitution(*restitution)
             }

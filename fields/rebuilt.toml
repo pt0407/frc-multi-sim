@@ -20,7 +20,7 @@ glb_colliders = false
 [ground]
 half_extents = [20.0, 0.1, 20.0]
 pos          = [0.0, -0.1, 0.0]
-friction     = 0.82   # fieldcore field-collider material (issue #44)
+friction     = 1.22   # fieldcore field-collider material (issue #44)
 restitution  = 0.08
 
 # --- perimeter walls -------------------------------------------------------
@@ -29,28 +29,28 @@ restitution  = 0.08
 name         = "south"
 pos          = [0.0, 0.3, -4.0345]
 half_extents = [8.2705, 0.6, 0.05]
-friction     = 0.82
+friction     = 1.22
 restitution  = 0.08
 
 [[walls]]
 name         = "north"
 pos          = [0.0, 0.3, 4.0345]
 half_extents = [8.2705, 0.6, 0.05]
-friction     = 0.82
+friction     = 1.22
 restitution  = 0.08
 
 [[walls]]
 name         = "west"
 pos          = [-8.2705, 0.3, 0.0]
 half_extents = [0.05, 0.6, 4.0345]
-friction     = 0.82
+friction     = 1.22
 restitution  = 0.08
 
 [[walls]]
 name         = "east"
 pos          = [8.2705, 0.3, 0.0]
 half_extents = [0.05, 0.6, 4.0345]
-friction     = 0.82
+friction     = 1.22
 restitution  = 0.08
 
 # --- obstacles (GLB-derived bounding boxes; fallback when glb colliders off)
@@ -110,34 +110,34 @@ friction     = 0.7
 [[obstacles]]
 kind         = "ramp"
 name         = "bump-s1"
-pos          = [-3.645, 0.03, 1.67]
-half_extents = [0.35, 0.03, 1.08]
+pos          = [-3.645, 0.0, 1.67]
+half_extents = [0.35, 0.165, 1.08]
 slope_dir    = [1.0, 0.0]
-friction     = 0.8
+friction     = 1.2
 
 [[obstacles]]
 kind         = "ramp"
 name         = "bump-n1"
-pos          = [-3.645, 0.03, -1.67]
-half_extents = [0.35, 0.03, 1.08]
+pos          = [-3.645, 0.0, -1.67]
+half_extents = [0.35, 0.165, 1.08]
 slope_dir    = [1.0, 0.0]
-friction     = 0.8
+friction     = 1.2
 
 [[obstacles]]
 kind         = "ramp"
 name         = "bump-s2"
-pos          = [3.645, 0.03, 1.67]
-half_extents = [0.35, 0.03, 1.08]
+pos          = [3.645, 0.0, 1.67]
+half_extents = [0.35, 0.165, 1.08]
 slope_dir    = [1.0, 0.0]
-friction     = 0.8
+friction     = 1.2
 
 [[obstacles]]
 kind         = "ramp"
 name         = "bump-n2"
-pos          = [3.645, 0.03, -1.67]
-half_extents = [0.35, 0.03, 1.08]
+pos          = [3.645, 0.0, -1.67]
+half_extents = [0.35, 0.165, 1.08]
 slope_dir    = [1.0, 0.0]
-friction     = 0.8
+friction     = 1.2
 
 # TOWER — GE-265xx assembly. Climbable structure against each alliance
 # wall: uprights at x ≈ ±7.21, base 1.17 x 0.99 m, plastic panels at the
@@ -163,14 +163,14 @@ kind         = "box"
 name         = "depot-west"
 pos          = [-7.85, 0.03, -1.93]
 half_extents = [0.37, 0.03, 0.50]
-friction     = 0.8
+friction     = 1.2
 
 [[obstacles]]
 kind         = "box"
 name         = "depot-east"
 pos          = [7.85, 0.03, 1.93]
 half_extents = [0.37, 0.03, 0.50]
-friction     = 0.8
+friction     = 1.2
 
 # --- placeholders (no colliders; emitted to viz + hashed into replays) ----
 
