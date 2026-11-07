@@ -99,6 +99,10 @@ camera.minZ = 0.05;
 camera.maxZ = 300;
 camera.lowerRadiusLimit = 5;
 camera.upperRadiusLimit = 80;
+camera.lowerBetaLimit = 0.15;
+camera.upperBetaLimit = 1.4;
+camera.panningSensibility = 40;
+camera.wheelPrecision = 40;
 {
   const hemi = new HemisphericLight("light", new Vector3(0.3, 1, 0.2), scene);
   hemi.intensity = 1.4;
