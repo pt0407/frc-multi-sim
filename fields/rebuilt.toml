@@ -111,33 +111,33 @@ friction     = 0.7
 kind         = "ramp"
 name         = "bump-s1"
 pos          = [-3.645, 0.0, 1.67]
-half_extents = [0.35, 0.165, 1.08]
+half_extents = [0.55, 0.165, 1.08]
 slope_dir    = [1.0, 0.0]
-friction     = 1.2
+friction     = 0.45
 
 [[obstacles]]
 kind         = "ramp"
 name         = "bump-n1"
 pos          = [-3.645, 0.0, -1.67]
-half_extents = [0.35, 0.165, 1.08]
+half_extents = [0.55, 0.165, 1.08]
 slope_dir    = [1.0, 0.0]
-friction     = 1.2
+friction     = 0.45
 
 [[obstacles]]
 kind         = "ramp"
 name         = "bump-s2"
 pos          = [3.645, 0.0, 1.67]
-half_extents = [0.35, 0.165, 1.08]
+half_extents = [0.55, 0.165, 1.08]
 slope_dir    = [1.0, 0.0]
-friction     = 1.2
+friction     = 0.45
 
 [[obstacles]]
 kind         = "ramp"
 name         = "bump-n2"
 pos          = [3.645, 0.0, -1.67]
-half_extents = [0.35, 0.165, 1.08]
+half_extents = [0.55, 0.165, 1.08]
 slope_dir    = [1.0, 0.0]
-friction     = 1.2
+friction     = 0.45
 
 # TOWER — GE-265xx assembly. Climbable structure against each alliance
 # wall: uprights at x ≈ ±7.21, base 1.17 x 0.99 m, plastic panels at the
@@ -163,14 +163,14 @@ kind         = "box"
 name         = "depot-west"
 pos          = [-7.85, 0.03, -1.93]
 half_extents = [0.37, 0.03, 0.50]
-friction     = 1.2
+friction     = 0.45
 
 [[obstacles]]
 kind         = "box"
 name         = "depot-east"
 pos          = [7.85, 0.03, 1.93]
 half_extents = [0.37, 0.03, 0.50]
-friction     = 1.2
+friction     = 0.45
 
 # --- placeholders (no colliders; emitted to viz + hashed into replays) ----
 

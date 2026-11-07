@@ -419,13 +419,14 @@ impl World {
                 body.reset_forces(true);
                 body.reset_torques(true);
                 for f in &resolved {
-                    // apply at chassis COM height — a single-box chassis
-                    // pitched by a below-COM force digs its edge into the
-                    // floor and sticks (observed: 800N drive -> 0.007 m).
+                    // apply slightly below COM: enough to pitch the nose up
+                    // over bumps (force-at-COM gives zero torque and the
+                    // chassis can never climb a wedge), not so low that the
+                    // leading edge digs into flat ground.
                     let p = rot2(f.local_point, yaw);
                     body.add_force_at_point(
                         vector![f.force[0], 0.0, f.force[1]],
-                        point![pos.x + p[0], pos.y, pos.z + p[1]],
+                        point![pos.x + p[0], pos.y - 0.18, pos.z + p[1]],
                         true,
                     );
                     if f.torque != 0.0 {
