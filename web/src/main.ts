@@ -133,6 +133,11 @@ const robotCfgs = new Map<number, RobotCfg>();
 const modelTried = new Set<number>();
 const pieces: AbstractMesh[] = [];
 const MAX_PIECES = 600;
+// shot tracers: emissive rings that ride the newest spawned pieces for
+// ~1.5s so shot arcs are visible (live pieces grow in count only via
+// shots — new indices = just-fired balls)
+let prevPieceCount = 0;
+const tracers: { mesh: Mesh; idx: number; ttl: number }[] = [];
 
 // all 504 pieces are instances of one source mesh — a single draw call
 // instead of per-mesh geometry/material (viz perf)
@@ -480,6 +485,31 @@ function connect() {
       } else {
         m.setEnabled(false);
       }
+    }
+    // tag newly spawned pieces with a tracer
+    if (plist.length > prevPieceCount) {
+      for (let i = prevPieceCount; i < plist.length; i++) {
+        const tm = MeshBuilder.CreateSphere(`tracer-${i}`, { diameter: 0.24, segments: 6 }, scene);
+        const tmat = new StandardMaterial(`tmat-${i}`, scene);
+        tmat.diffuseColor = new Color3(1, 0.9, 0.3);
+        tmat.emissiveColor = new Color3(1, 0.8, 0.2);
+        tmat.alpha = 0.6;
+        tm.material = tmat;
+        tracers.push({ mesh: tm, idx: i, ttl: 75 });
+      }
+    }
+    prevPieceCount = plist.length;
+    // tracers ride their piece + fade
+    for (let i = tracers.length - 1; i >= 0; i--) {
+      const t = tracers[i];
+      if (t.ttl <= 0 || t.idx >= plist.length) {
+        t.mesh.dispose();
+        tracers.splice(i, 1);
+        continue;
+      }
+      t.mesh.position.set(plist[t.idx][0], plist[t.idx][1], plist[t.idx][2]);
+      (t.mesh.material as StandardMaterial).alpha = 0.6 * (t.ttl / 75);
+      t.ttl--;
     }
 
     let lines = [`tick ${msg.tick}`];
