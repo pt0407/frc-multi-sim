@@ -1,62 +1,105 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>FRC Multi-Sim Viz</title>
-    <style>
-      html, body { margin: 0; height: 100%; overflow: hidden; background: #111; }
-      #renderCanvas { width: 100%; height: 100%; display: block; }
-      #hud {
-        position: fixed; top: 8px; left: 8px; color: #ddd;
-        font: 12px monospace; background: rgba(0,0,0,0.5);
-        padding: 8px 10px; border-radius: 4px; white-space: pre;
-      }
-    </style>
-  </head>
-  <body>
-    <canvas id="renderCanvas"></canvas>
-    <div id="hud">connecting…</div>
-    <div id="ctrl" style="position:fixed;top:8px;right:8px;background:rgba(10,14,20,.85);color:#dfe6ee;padding:10px 12px;border-radius:8px;font:12px monospace;z-index:10">
-      <b>match</b><br>
-      phase: <span id="c-phase">—</span> <span id="c-time"></span><br>
-      score: <span id="c-score">—</span><br>
-      <button data-p="auto">auto</button>
-      <button data-p="teleop">teleop</button>
-      <button data-p="endgame">endgame</button>
-      <button data-p="complete">end</button>
-      <button id="c-clear">clock</button><br>
-      <button id="c-reset">reset</button>
-      <button id="c-start" style="background:#1a7">START</button><br>
-      <span id="c-shift" style="color:#8ab;font-size:11px"></span>
-    </div>
-    <script>
-      const cws = new WebSocket("ws://127.0.0.1:9772");
-      cws.onmessage = (e) => {
-        const s = JSON.parse(e.data);
-        document.getElementById("c-phase").textContent = s.phase;
-        document.getElementById("c-time").textContent = s.time_remaining.toFixed(0) + "s";
-        document.getElementById("c-score").textContent = s.scores.join("–");
-        const sh = document.getElementById("c-shift");
-        if (s.hub_active !== undefined && s.hub_active !== null)
-          sh.textContent = (s.hub_active === 0 ? "RED" : "BLUE") + " hub active";
-      };
-      for (const b of document.querySelectorAll("#ctrl button[data-p]"))
-        b.onclick = () => cws.send(JSON.stringify({op:"set_phase", phase:b.dataset.p}));
-      document.getElementById("c-clear").onclick =
-        () => cws.send(JSON.stringify({op:"clear_phase"}));
-      let paused = false;
-      document.getElementById("c-pause").onclick = function() {
-        paused = !paused;
-        this.textContent = paused ? "resume" : "pause";
-        cws.send(JSON.stringify({op:"pause", paused}));
-      };
-      document.getElementById("c-reset").onclick =
-        () => cws.send(JSON.stringify({op:"reset"}));
-      document.getElementById("c-start").onclick = () => {
-        cws.send(JSON.stringify({op:"reset"}));
-        setTimeout(() => cws.send(JSON.stringify({op:"start_match"})), 300);
-      };
-    </script>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <title>FRC Sim — REBUILT</title>
+  <style>
+    html,body{margin:0;padding:0;overflow:hidden;background:#0b0d11;font-family:'SF Mono',Menlo,monospace}
+    canvas{width:100%;height:100%;display:block}
+    /* loading screen */
+    #load{position:fixed;inset:0;background:#0b0d11;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;color:#dfe6ee;transition:opacity .5s}
+    #load.done{opacity:0;pointer-events:none}
+    #load h1{font-size:28px;letter-spacing:6px;margin:0 0 8px}
+    #load p{color:#7a8794;font-size:12px;margin:4px}
+    .spin{width:36px;height:36px;border:3px solid #1f2937;border-top-color:#f59e0b;border-radius:50%;animation:sp 1s linear infinite;margin:14px}
+    @keyframes sp{to{transform:rotate(360deg)}}
+    /* top status bar */
+    #status{position:fixed;top:0;left:0;right:0;display:flex;justify-content:center;z-index:30;pointer-events:none}
+    #status .bar{background:rgba(10,14,20,.88);border:1px solid #1f2937;border-top:none;border-radius:0 0 10px 10px;padding:8px 18px;display:flex;gap:16px;align-items:center;color:#dfe6ee;font-size:13px}
+    #phase-pill{padding:2px 10px;border-radius:10px;font-weight:700;font-size:12px;text-transform:uppercase}
+    .disabled{background:#374151;color:#9ca3af}
+    .auto{background:#b45309;color:#fff}
+    .teleop{background:#059669;color:#fff}
+    .endgame{background:#c2410c;color:#fff}
+    .complete{background:#6d28d9;color:#fff}
+    #shift-pill{display:none;padding:2px 10px;border-radius:10px;font-weight:700;font-size:12px}
+    #shift-pill.red{display:block;background:#dc2626;color:#fff}
+    #shift-pill.blue{display:block;background:#2563eb;color:#fff}
+    #score{font-weight:700;font-size:15px;letter-spacing:2px}
+    #clock{color:#9ca3af}
+    /* controls */
+    #ctrl{position:fixed;right:12px;top:56px;background:rgba(10,14,20,.9);border:1px solid #1f2937;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;z-index:30;min-width:160px}
+    #ctrl button{background:#1f2937;color:#dfe6ee;border:1px solid #374151;border-radius:6px;padding:7px 10px;font:600 12px monospace;cursor:pointer;text-align:left}
+    #ctrl button:hover{background:#374151}
+    #ctrl #c-start{background:#059669;border-color:#059669;text-align:center}
+    #ctrl #c-start:hover{background:#047857}
+    #ctrl .label{font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-top:6px}
+    #camkeys{font-size:10px;color:#4b5563}
+    /* telemetry rail */
+    #telem{position:fixed;right:12px;bottom:12px;background:rgba(10,14,20,.85);border:1px solid #1f2937;border-radius:10px;padding:10px 12px;color:#cfd8e3;font-size:11px;z-index:30;min-width:190px}
+    #telem b{color:#9ca3af}
+    /* staging banner */
+    #banner{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:rgba(5,150,105,.9);color:#fff;padding:10px 26px;border-radius:10px;font-weight:700;font-size:16px;letter-spacing:2px;z-index:40;display:none}
+  </style>
+</head>
+<body>
+  <div id="load">
+    <h1>FRC SIM</h1>
+    <p>REBUILT — 2026 season</p>
+    <div class="spin"></div>
+    <p id="load-msg">connecting…</p>
+  </div>
+
+  <div id="status"><div class="bar">
+    <span id="phase-pill" class="disabled">staged</span>
+    <span id="score">0–0</span>
+    <span id="shift-pill"></span>
+    <span id="clock">0.0s</span>
+  </div></div>
+
+  <div id="ctrl">
+    <button id="c-start">▶ START MATCH</button>
+    <button id="c-pause">⏸ pause</button>
+    <button id="c-reset">↻ reset</button>
+    <div class="label">phase</div>
+    <button data-p="auto">auto</button>
+    <button data-p="teleop">teleop</button>
+    <button data-p="endgame">endgame</button>
+    <button data-p="complete">end</button>
+    <div class="label">camera</div>
+    <div id="camkeys">1 overview &nbsp;2 robot &nbsp;3 red &nbsp;4 blue</div>
+  </div>
+
+  <div id="telem"><b>telemetry</b><br>…</div>
+  <div id="banner">READY — press START</div>
+  <canvas id="canvas"></canvas>
+  <script type="module" src="/src/main.ts"></script>
+  <script>
+    const cws = new WebSocket("ws://127.0.0.1:9772");
+    const $ = id => document.getElementById(id);
+    cws.onmessage = (e) => {
+      const s = JSON.parse(e.data);
+      const pill = $("phase-pill");
+      pill.className = s.phase; pill.id = "phase-pill";
+      pill.textContent = s.phase;
+      $("clock").textContent = s.time_remaining.toFixed(1) + "s";
+      $("score").textContent = s.scores.join("–");
+      const sh = $("shift-pill");
+      if (s.hub_active !== undefined && s.hub_active !== null) {
+        sh.className = s.hub_active === 0 ? "red" : "blue";
+        sh.textContent = (s.hub_active === 0 ? "RED" : "BLUE") + " HUB";
+      } else sh.className = "";
+      $("banner").style.display = s.phase === "disabled" ? "block" : "none";
+    };
+    $("c-start").onclick = () => cws.send(JSON.stringify({op:"start_match"}));
+    $("c-reset").onclick = () => cws.send(JSON.stringify({op:"reset"}));
+    $("c-pause").onclick = function() {
+      this._p = !this._p;
+      this.textContent = this._p ? "▶ resume" : "⏸ pause";
+      cws.send(JSON.stringify({op:"pause", paused:this._p}));
+    };
+    for (const b of document.querySelectorAll("#ctrl button[data-p]"))
+      b.onclick = () => cws.send(JSON.stringify({op:"set_phase", phase:b.dataset.p}));
+  </script>
+</body>
 </html>

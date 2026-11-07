@@ -81,13 +81,11 @@ interface StateMsg {
 }
 type Msg = ConfigMsg | StateMsg;
 
-const hud = document.getElementById("hud")!;
-const telem = (() => {
-  const d = document.createElement("div");
-  d.style.cssText = "position:fixed;right:8px;top:120px;background:rgba(10,14,20,.8);color:#cfd8e3;padding:10px 12px;border-radius:8px;font:11px monospace;z-index:10;min-width:190px";
-  document.body.appendChild(d);
-  return d;
-})();
+const hud = document.getElementById("load-msg")!;
+const loadEl = document.getElementById("load")!;
+const telemEl = document.getElementById("telem")!;
+function hideLoad() { loadEl.classList.add("done"); }
+const telem = telemEl;
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 const engine = new Engine(canvas, true);
 const scene = new Scene(engine);
@@ -102,6 +100,13 @@ camera.upperRadiusLimit = 80;
 camera.lowerBetaLimit = 0.15;
 camera.upperBetaLimit = 1.4;
 camera.panningSensibility = 40;
+// camera presets: 1=overview 2=follow-robot 3=red 4=blue (match-ops UX)
+addEventListener("keydown", (e) => {
+  if (e.key === "1") { camera.alpha = -Math.PI / 2; camera.beta = 0.55; camera.radius = 30; camera.target = Vector3.Zero(); }
+  if (e.key === "2") { const r = robots.get(0); if (r) camera.target = r.position; }
+  if (e.key === "3") { camera.alpha = -Math.PI / 2 + 0.4; camera.target = new Vector3(-3.5, 0, 0); }
+  if (e.key === "4") { camera.alpha = -Math.PI / 2 - 0.4; camera.target = new Vector3(3.5, 0, 0); }
+});
 camera.wheelPrecision = 40;
 {
   const hemi = new HemisphericLight("light", new Vector3(0.3, 1, 0.2), scene);
@@ -432,7 +437,7 @@ function connect() {
           (r.contact_impulse > 0 ? ` contact=${r.contact_impulse}` : ""),
       );
     }
-    hud.textContent = lines.join("\n");
+    telem.textContent = ""; telem.innerHTML = lines.join("<br>"); hideLoad();
   };
 }
 
