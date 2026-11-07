@@ -488,11 +488,15 @@ async fn main() -> Result<()> {
                             pieces: world.piece_positions(),
                             scores: world.scores,
                             held: world.held.clone(),
-                            match_state: world.match_clock.phase_at(tick),
-                            match_time: world.match_clock.time_remaining(tick),
+                            // phase_at_tick/time_remaining subtract
+                            // match_epoch internally — use those, not the
+                            // raw clock, so staging doesn't leak into the
+                            // match timer (issue: "complete" at startup)
+                            match_state: world.phase_at_tick(tick),
+                            match_time: world.time_remaining(),
                             hub_active: if world.match_clock.config.shift_s
                                 > 0.0
-                                && world.match_clock.phase_at(tick)
+                                && world.phase_at_tick(tick)
                                     == frc_sim_m0::r#match::MatchPhase::Teleop
                             {
                                 Some(if world.hub_active_for_viz(0, tick) {
