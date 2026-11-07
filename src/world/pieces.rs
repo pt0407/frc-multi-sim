@@ -179,7 +179,7 @@ pub fn spawn_table(
                 + if row % 2 == 1 { pitch * 0.5 } else { 0.0 }; // stagger
             let zz = z.center[1] - z.half_extents[1]
                 + pitch * (row as f32 + 0.5);
-            let y = FUEL_RADIUS + 0.01 + layer as f32 * FUEL_RADIUS * 2.2;
+            let y = FUEL_RADIUS + 0.01 + layer as f32 * FUEL_RADIUS * 2.0;
             out.push(spawn_piece(bodies, colliders, [x, y, zz], [0.0; 3]));
             i += 1;
         }
