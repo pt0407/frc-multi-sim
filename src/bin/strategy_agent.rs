@@ -52,6 +52,10 @@ enum Action {
     Intake { active: bool },
     Wait { seconds: f32 },
     Shoot(ShotParams),
+    /// advance once pieces_held >= value (or timeout elapses)
+    WaitHeld { value: u32, timeout: f32 },
+    /// fire one shot per `gap` seconds until held == 0 (or timeout)
+    ShootAll { launch_velocity: f32, hood_angle: f32, turret_yaw: f32, launch_height: f32, gap: f32, timeout: f32 },
     /// drive a mechanism joint to a target (issue #57): joint = index
     /// into the robot's [[mech]] list, target = angle/extent
     Mech { joint: usize, target: f32 },
@@ -101,6 +105,9 @@ async fn main() -> Result<()> {
     let mut best_d = f32::MAX;
     let mut stall_tick = 0u64;
     let mut recover_until = 0u64;
+    let mut held_gate_since: Option<u64> = None;
+    let mut shootall_since: Option<u64> = None;
+    let mut last_shot_tick = 0u64;
 
     while let Some(Ok(msg)) = stream.next().await {
         let Message::Text(txt) = msg else { continue };
@@ -130,6 +137,42 @@ async fn main() -> Result<()> {
                     } else if s.tick >= wait_until.unwrap() {
                         wait_until = None;
                         idx += 1;
+                    }
+                }
+                Some(Action::WaitHeld { value, timeout }) => {
+                    if s.pieces_held >= *value {
+                        held_gate_since = None;
+                        idx += 1;
+                    } else {
+                        let since = *held_gate_since.get_or_insert(s.tick);
+                        if s.tick - since > (timeout * 50.0) as u64 {
+                            held_gate_since = None;
+                            idx += 1;
+                        }
+                    }
+                }
+                Some(Action::ShootAll { launch_velocity, hood_angle, turret_yaw, launch_height, gap, timeout }) => {
+                    if s.pieces_held == 0 {
+                        shootall_since = None;
+                        idx += 1;
+                    } else {
+                        let since = *shootall_since.get_or_insert(s.tick);
+                        if s.tick - since > (timeout * 50.0) as u64 {
+                            shootall_since = None;
+                            idx += 1;
+                        } else if s.tick - last_shot_tick >= (gap * 50.0) as u64 {
+                            let act = ActuatorFrame {
+                                force: [0.0, 0.0], torque: 0.0, modules: None,
+                                intake_active: intake_on, shoot: Some(ShotCommand {
+                                    launch_velocity: *launch_velocity, hood_angle: *hood_angle,
+                                    turret_yaw: *turret_yaw, launch_height: *launch_height,
+                                }), mech: mech_last,
+                            };
+                            sink.send(Message::Text(
+                                serde_json::to_string(&AgentMsg::Actuator(act)).unwrap().into(),
+                            )).await?;
+                            last_shot_tick = s.tick;
+                        }
                     }
                 }
                 Some(Action::Mech { joint, target }) => {

@@ -52,6 +52,10 @@ enum Action {
     Intake { active: bool },
     Wait { seconds: f32 },
     Shoot(ShotParams),
+    /// advance once pieces_held >= value (or timeout elapses)
+    WaitHeld { value: u32, timeout: f32 },
+    /// fire one shot per `gap` seconds until held == 0 (or timeout)
+    ShootAll { launch_velocity: f32, hood_angle: f32, turret_yaw: f32, launch_height: f32, gap: f32, timeout: f32 },
     Mech { joint: usize, target: f32 },
     Hold,
 }
@@ -74,6 +78,9 @@ struct RobotBrain {
     best_d: f32,
     stall_tick: u64,
     recover_until: u64,
+    held_gate_since: Option<u64>,
+    shootall_since: Option<u64>,
+    last_shot_tick: u64,
 }
 
 impl RobotBrain {
@@ -82,7 +89,7 @@ impl RobotBrain {
             &std::fs::read_to_string(path)
                 .with_context(|| format!("read {}", path.display()))?,
         )?;
-        Ok(Self { strat, idx: 0, intake_on: false, mech_last: None, wait_until: None, done: false, best_d: f32::MAX, stall_tick: 0, recover_until: 0 })
+        Ok(Self { strat, idx: 0, intake_on: false, mech_last: None, wait_until: None, done: false, best_d: f32::MAX, stall_tick: 0, recover_until: 0, held_gate_since: None, shootall_since: None, last_shot_tick: 0 })
     }
 
     /// Mirror of strategy_agent's per-tick action interpreter; returns the
@@ -105,6 +112,33 @@ impl RobotBrain {
                     } else if s.tick >= self.wait_until.unwrap() {
                         self.wait_until = None;
                         self.idx += 1;
+                    }
+                }
+    Some(Action::WaitHeld { value, timeout }) => {
+                    if s.pieces_held >= *value {
+                        self.held_gate_since = None;
+                        self.idx += 1;
+                    } else {
+                        let since = *self.held_gate_since.get_or_insert(s.tick);
+                        if s.tick - since > (timeout * 50.0) as u64 {
+                            self.held_gate_since = None;
+                            self.idx += 1;
+                        }
+                    }
+                }
+                Some(Action::ShootAll { launch_velocity, hood_angle, turret_yaw, launch_height, gap, timeout }) => {
+                    if s.pieces_held == 0 {
+                        self.shootall_since = None;
+                        self.idx += 1;
+                    } else {
+                        let since = *self.shootall_since.get_or_insert(s.tick);
+                        if s.tick - since > (timeout * 50.0) as u64 {
+                            self.shootall_since = None;
+                            self.idx += 1;
+                        } else if s.tick - self.last_shot_tick >= (gap * 50.0) as u64 {
+                            shoot = Some(ShotCommand { launch_velocity: *launch_velocity, hood_angle: *hood_angle, turret_yaw: *turret_yaw, launch_height: *launch_height });
+                            self.last_shot_tick = s.tick;
+                        }
                     }
                 }
                 Some(Action::Mech { joint, target }) => {
