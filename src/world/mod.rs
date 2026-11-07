@@ -56,6 +56,9 @@ pub struct World {
     intakes: Vec<Option<IntakeSpec>>,
     /// sticky intake-run flag per robot, updated from actuator frames
     intake_active: Vec<bool>,
+    /// edge-trigger for `cmd.shoot` — a latched frame consumes one piece
+    /// once, not every physics tick until the next command arrives
+    shot_latched: Vec<bool>,
     /// physics ticks elapsed — the world's only clock (issue #10); the
     /// match phase is a pure function of this via `match_clock`
     tick: u64,
@@ -137,6 +140,7 @@ impl World {
             hubs: table.hubs.clone(),
             intakes: specs.iter().map(|s| s.intake).collect(),
             intake_active: vec![false; specs.len()],
+            shot_latched: vec![false; specs.len()],
             tick: 0,
             match_clock: MatchClock::default(),
             match_epoch: 0,
@@ -388,8 +392,12 @@ impl World {
                 // shooter: consume a held piece and spawn a ballistic fuel
                 // (FuelSim launchFuel: hood angle, turret yaw, launch height,
                 // plus chassis velocity)
+                if cmd.shoot.is_none() {
+                    self.shot_latched[i] = false;
+                }
                 if let Some(shot) = cmd.shoot {
-                    if self.held[i] > 0 {
+                    if self.held[i] > 0 && !self.shot_latched[i] {
+                        self.shot_latched[i] = true;
                         self.held[i] -= 1;
                         let aim = yaw + shot.turret_yaw;
                         let hv = shot.launch_velocity * shot.hood_angle.cos();
