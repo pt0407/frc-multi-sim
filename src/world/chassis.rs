@@ -112,8 +112,9 @@ pub fn spawn_chassis(
             .additional_mass(spec.mass)
             .linear_damping(0.05)
             .angular_damping(0.15)
-            // lock X/Z rotation: chassis stays upright (2.5D drive, 3D contacts)
-            .enabled_rotations(false, true, false)
+            // rotations free: corner springs pitch/roll the chassis over
+            // bump terrain like real suspension; the floor collider still
+            // catches the belly if springs lose contact
             .ccd_enabled(true)
             .build(),
     );

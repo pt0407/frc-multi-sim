@@ -314,7 +314,8 @@ async function loadRobotModel(id: number, root: TransformNode, cfg: RobotCfg) {
     const holder = new TransformNode(`robot-${id}-model`, scene);
     holder.parent = root;
     const deg = Math.PI / 180;
-    const urlRot = new URLSearchParams(location.search).get("rot");
+    const params = new URLSearchParams(location.search);
+    const urlRot = params.get("rot");
     const [rx, ry, rz] = urlRot
       ? urlRot.split(",").map(Number) as [number, number, number]
       : (cfg.model.rotation_deg ?? [0, 0, 0]);
@@ -322,7 +323,10 @@ async function loadRobotModel(id: number, root: TransformNode, cfg: RobotCfg) {
     holder.rotationQuaternion = Quaternion.RotationAxis(new Vector3(0, 0, 1), rz * deg)
       .multiply(Quaternion.RotationAxis(new Vector3(0, 1, 0), ry * deg))
       .multiply(Quaternion.RotationAxis(new Vector3(1, 0, 0), rx * deg));
-    const [ox, oy, oz] = cfg.model.offset ?? [0, 0, 0];
+    const urlOff = params.get("off");
+    const [ox, oy, oz] = urlOff
+      ? urlOff.split(",").map(Number) as [number, number, number]
+      : (cfg.model.offset ?? [0, 0, 0]);
     holder.position = new Vector3(ox, oy, oz);
     const s = cfg.model.scale ?? 1;
     holder.scaling = new Vector3(s, s, s);
