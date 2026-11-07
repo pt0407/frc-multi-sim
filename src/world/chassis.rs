@@ -43,7 +43,7 @@ impl RobotSpec {
         RobotSpec {
             mass: ROBOT_MASS,
             half_extents: [ROBOT_HALF; 3],
-            spawn: [x, ROBOT_HALF + 0.05, 0.0],
+            spawn: [x, ROBOT_HALF + 0.005, 0.0],
             intake: None,
             sensors: SensorConfig::default(),
             model: None,
@@ -56,7 +56,7 @@ impl RobotSpec {
         RobotSpec {
             mass: a.mass,
             half_extents: a.half_extents,
-            spawn: [xz[0], a.half_extents[1] + 0.05, xz[1]],
+            spawn: [xz[0], a.half_extents[1] + 0.005, xz[1]],
             intake: a.intake,
             sensors: a.sensors.resolved(),
             model: a.model.clone(),
