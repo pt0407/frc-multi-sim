@@ -14,6 +14,8 @@ import {
   StandardMaterial,
   TransformNode,
   Vector3,
+  Axis,
+  Space,
 } from "@babylonjs/core";
 import "@babylonjs/loaders/glTF";
 
@@ -121,6 +123,11 @@ const ROBOT_COLORS = [Color3.Red(), new Color3(0.2, 0.4, 1), new Color3(0, 0.8, 
 
 const robots = new Map<number, TransformNode>();
 const mechArms = new Map<number, Mesh>(); // robot id -> arm mesh (animated by mech_angles)
+const intakeRollers = new Map<number, Mesh>(); // spinning intake roller
+const flywheels = new Map<number, Mesh>(); // shooter flywheel disc
+const shotFlash = new Map<number, { mesh: Mesh; ttl: number }>();
+const prevHeld = new Map<number, number>();
+let intakeOn: boolean[] = [];
 const robotCfgs = new Map<number, RobotCfg>();
 const modelTried = new Set<number>();
 const pieces: AbstractMesh[] = [];
@@ -292,6 +299,38 @@ function robotMesh(id: number): TransformNode {
       im.alpha = 0.35;
       intake.material = im;
       intake.metadata = { fallback: true }; // hidden when GLB loads
+
+      // spinning intake roller at the robot's front lip
+      const roller = MeshBuilder.CreateCylinder(`robot-${id}-roller`, { diameter: 0.11, height: i.z_max - i.z_min }, scene);
+      roller.parent = root;
+      roller.rotation.x = Math.PI / 2; // axis along robot z
+      roller.position = new Vector3(0.5, 0.08, 0);
+      const rm = new StandardMaterial(`rm-${id}`, scene);
+      rm.diffuseColor = new Color3(0.15, 0.15, 0.15);
+      rm.emissiveColor = new Color3(0.02, 0.02, 0.02);
+      roller.material = rm;
+      intakeRollers.set(id, roller);
+
+      // shooter flywheel — spins whenever the bot is enabled, kick on shots
+      const fw = MeshBuilder.CreateCylinder(`robot-${id}-fw`, { diameter: 0.18, height: 0.06 }, scene);
+      fw.parent = root;
+      fw.position = new Vector3(-0.2, 0.52, 0);
+      const fm = new StandardMaterial(`fm-${id}`, scene);
+      fm.diffuseColor = new Color3(0.9, 0.25, 0.1);
+      fm.emissiveColor = new Color3(0.35, 0.08, 0.02);
+      fw.material = fm;
+      flywheels.set(id, fw);
+
+      // muzzle flash marker shown briefly when a shot fires
+      const fl = MeshBuilder.CreateBox(`robot-${id}-flash`, { size: 0.16 }, scene);
+      fl.parent = root;
+      fl.position = new Vector3(-0.2, 0.62, 0);
+      const fmm = new StandardMaterial(`fmm-${id}`, scene);
+      fmm.diffuseColor = new Color3(1.0, 0.9, 0.2);
+      fmm.emissiveColor = new Color3(1.0, 0.7, 0.1);
+      fl.material = fmm;
+      fl.setEnabled(false);
+      shotFlash.set(id, { mesh: fl, ttl: 0 });
     }
     robots.set(id, m);
   }
@@ -380,6 +419,15 @@ function connect() {
     }
     // animated mechanism arms — one bar per robot pivoting at the
     // chassis front edge; angle comes from mech_angles (issue #57/#61)
+    intakeOn = (msg as any).intake_active ?? [];
+    (msg as any).held?.forEach((h: number, id: number) => {
+      const prev = prevHeld.get(id) ?? h;
+      if (h < prev) {
+        const f = shotFlash.get(id);
+        if (f) { f.ttl = 10; f.mesh.setEnabled(true); }
+      }
+      prevHeld.set(id, h);
+    });
     (msg as any).mech_angles?.forEach((a: number | null, id: number) => {
       if (a == null) return;
       let arm = mechArms.get(id);
@@ -447,5 +495,18 @@ function connect() {
 }
 
 connect();
-engine.runRenderLoop(() => scene.render());
+const SPIN = { roller: 0.25, flywheel: 0.4, kick: 0.8 };
+engine.runRenderLoop(() => {
+  for (const [id, roller] of intakeRollers) {
+    if (intakeOn[id]) roller.rotate(Axis.Y, SPIN.roller, Space.LOCAL);
+  }
+  for (const [id, fw] of flywheels) {
+    const kicking = (shotFlash.get(id)?.ttl ?? 0) > 0;
+    fw.rotate(Axis.Y, kicking ? SPIN.kick : SPIN.flywheel, Space.LOCAL);
+  }
+  for (const f of shotFlash.values()) {
+    if (f.ttl > 0 && --f.ttl === 0) f.mesh.setEnabled(false);
+  }
+  scene.render();
+});
 window.addEventListener("resize", () => engine.resize());

@@ -707,6 +707,10 @@ impl World {
         }
     }
 
+    pub fn intake_active(&self, robot: usize) -> bool {
+        self.intake_active.get(robot).copied().unwrap_or(false)
+    }
+
     pub fn mech_angle(&self, robot: usize) -> Option<f32> {
         self.mechs[robot]
             .first()

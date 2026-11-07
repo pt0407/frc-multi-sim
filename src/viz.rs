@@ -38,6 +38,8 @@ pub struct VizFrame {
     pub hub_active: Option<usize>,
     /// per-robot mechanism arm joint angle (rad), None when unmechanized
     pub mech_angles: Vec<Option<f32>>,
+    /// per-robot intake-run flag (drives roller/spinner animation)
+    pub intake_active: Vec<bool>,
 }
 
 /// Emit the loaded field layout (issue #14) so web clients can render the
@@ -122,6 +124,7 @@ async fn state_collector(
         match_time: 0.0,
         hub_active: None,
         mech_angles: Vec::new(),
+        intake_active: Vec::new(),
     };
     let mut iv = interval(Duration::from_secs_f32(1.0 / VIZ_HZ));
     loop {

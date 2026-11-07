@@ -510,6 +510,9 @@ async fn main() -> Result<()> {
                             mech_angles: (0..world.num_robots())
                                 .map(|r| world.mech_angle(r))
                                 .collect(),
+                            intake_active: (0..world.num_robots())
+                                .map(|r| world.intake_active(r))
+                                .collect(),
                         });
                         }
                     }
