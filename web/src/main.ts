@@ -291,6 +291,7 @@ function robotMesh(id: number): TransformNode {
       im.emissiveColor = new Color3(0.05, 0.3, 0.15);
       im.alpha = 0.35;
       intake.material = im;
+      intake.metadata = { fallback: true }; // hidden when GLB loads
     }
     robots.set(id, m);
   }
