@@ -43,6 +43,15 @@
   </style>
 </head>
 <body>
+  <div id="home" style="position:fixed;inset:0;background:linear-gradient(180deg,#0b0d11 0%,#111827 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:110;color:#dfe6ee">
+    <h1 style="font-size:42px;letter-spacing:10px;margin:0">FRC SIM</h1>
+    <p style="color:#f59e0b;letter-spacing:4px;font-size:13px">REBUILT · 2026 SEASON</p>
+    <div style="display:flex;gap:14px;margin-top:36px">
+      <button id="h-match" style="background:#059669;color:#fff;border:none;border-radius:10px;padding:14px 30px;font:700 15px monospace;cursor:pointer">▶ RUN MATCH</button>
+      <button id="h-practice" style="background:#1f2937;color:#dfe6ee;border:1px solid #374151;border-radius:10px;padding:14px 30px;font:600 15px monospace;cursor:pointer">Practice / Free Drive</button>
+    </div>
+    <p style="color:#4b5563;font-size:11px;margin-top:28px">camera: 1 overview · 2 robot · 3 red · 4 blue · drag to orbit · scroll to zoom</p>
+  </div>
   <div id="load">
     <h1>FRC SIM</h1>
     <p>REBUILT — 2026 season</p>
@@ -90,6 +99,15 @@
         sh.textContent = (s.hub_active === 0 ? "RED" : "BLUE") + " HUB";
       } else sh.className = "";
       $("banner").style.display = s.phase === "disabled" ? "block" : "none";
+    };
+    document.getElementById("h-match").onclick = () => {
+      document.getElementById("home").style.display = "none";
+      cws.send(JSON.stringify({op:"reset"}));
+      setTimeout(() => cws.send(JSON.stringify({op:"start_match"})), 300);
+    };
+    document.getElementById("h-practice").onclick = () => {
+      document.getElementById("home").style.display = "none";
+      cws.send(JSON.stringify({op:"reset"}));
     };
     $("c-start").onclick = () => cws.send(JSON.stringify({op:"start_match"}));
     $("c-reset").onclick = () => cws.send(JSON.stringify({op:"reset"}));
