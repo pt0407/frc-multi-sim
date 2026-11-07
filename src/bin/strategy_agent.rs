@@ -196,7 +196,7 @@ async fn main() -> Result<()> {
                 let (mut fx, mut fz) = if reversing {
                     (-ex / d.max(1e-3), -ez / d.max(1e-3))
                 } else {
-                    (300.0 * ex - 60.0 * s.linvel[0], 300.0 * ez - 60.0 * s.linvel[2])
+                    (1400.0 * ex - 160.0 * s.linvel[0], 1400.0 * ez - 160.0 * s.linvel[2])
                 };
                 let m = (fx * fx + fz * fz).sqrt();
                 let cap = if reversing { args.max_force * 0.7 } else { args.max_force };
