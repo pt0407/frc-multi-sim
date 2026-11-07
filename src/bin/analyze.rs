@@ -164,6 +164,15 @@ fn zone(x: f32, z: f32) -> &'static str {
 
 fn main() -> Result<()> {
     let args = Args::parse();
+    // resolve game spec first so its field/pieces refs apply (same as server)
+    let game_path = args.game.clone().or_else(|| {
+        let p = PathBuf::from("games/rebuilt.toml");
+        p.exists().then_some(p)
+    });
+    let game_spec = game_path
+        .as_ref()
+        .map(|p| frc_sim_m0::r#match::GameSpec::load(p))
+        .transpose()?;
     let cfg = SimConfig {
         time_mode: TimeMode::Fast,
         seed: args.seed,
@@ -171,14 +180,15 @@ fn main() -> Result<()> {
         archetypes: args.archetype.clone(),
         num_robots: args.num_robots,
         field: args.field.clone().or_else(|| {
-            let p = PathBuf::from("fields/rebuilt.toml");
-            p.exists().then_some(p)
+            game_spec.as_ref().and_then(|g| g.field.clone()).or_else(|| {
+                let p = PathBuf::from("fields/rebuilt.toml");
+                p.exists().then_some(p)
+            })
         }),
-        pieces: args.pieces.clone(),
-        game: args.game.clone().or_else(|| {
-            let p = PathBuf::from("games/rebuilt.toml");
-            p.exists().then_some(p)
+        pieces: args.pieces.clone().or_else(|| {
+            game_spec.as_ref().and_then(|g| g.pieces.clone())
         }),
+        game: game_path,
         record: None,
         replay: None,
         diff: None,
@@ -233,6 +243,12 @@ fn main() -> Result<()> {
                     stalled_ticks[r] += AGENT_EVERY as u64;
                 }
                 *zone_ticks[r].entry(zone(p[0], p[2])).or_default() += AGENT_EVERY as u64;
+                if r == 0 && zone(p[0],p[2]) == "pile" && tick % 400 == 0 {
+                    // nearest piece distance
+                    let pp = world.piece_positions();
+                    let dmin = pp.iter().map(|q| ((q[0]-p[0]).powi(2)+(q[2]-p[2]).powi(2)).sqrt()).fold(f32::MAX, f32::min);
+                    eprintln!("PILE t={} pos={:?} held={} intake={:?} npieces={} dmin={:.2}", tick, p, world.held[r], brains[r].as_ref().map(|b| b.intake_on), pp.len(), dmin);
+                }
                 if r == 0 && tick % 4000 == 0 {
                     eprintln!("t={} pos={:?} idx={:?} phase={:?}", tick, p, brains[r].as_ref().map(|b| b.idx), frame.match_state);
                 }

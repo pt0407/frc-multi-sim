@@ -39,6 +39,8 @@ pub struct World {
     pub chassis: Vec<RigidBodyHandle>,
     pub chassis_colliders: Vec<ColliderHandle>,
     drivetrains: Vec<Drivetrain>,
+    /// per-robot chassis half-extents (for wheel-contact spring points)
+    chassis_dims: Vec<[f32; 3]>,
     /// Seeded RNG — the only legal source of randomness in world code
     /// (PLAN §0). Piece spawns / sensor noise draw here.
     pub rng: SimRng,
@@ -132,6 +134,7 @@ impl World {
                 .iter()
                 .map(|s| Drivetrain::swerve(s.mass, s.half_extents[0]))
                 .collect(),
+            chassis_dims: specs.iter().map(|s| s.half_extents).collect(),
             rng: SimRng::seeded(seed),
             field,
             pieces: Vec::new(),
@@ -426,11 +429,46 @@ impl World {
                     let p = rot2(f.local_point, yaw);
                     body.add_force_at_point(
                         vector![f.force[0], 0.0, f.force[1]],
-                        point![pos.x + p[0], pos.y - 0.18, pos.z + p[1]],
+                        point![pos.x + p[0], pos.y - 0.26, pos.z + p[1]],
                         true,
                     );
                     if f.torque != 0.0 {
                         body.add_torque(vector![0.0, f.torque, 0.0], true);
+                    }
+                }
+                // virtual-wheel suspension: 4 corner contacts sample
+                // field.ground_height and push up with spring-damper force.
+                // The rigid chassis conforms to bump terrain per-corner
+                // (real robots climb via wheels) instead of seesawing.
+                {
+                    let [hx, hy, hz] = self.chassis_dims[i];
+                    let rq = body.rotation();
+                    // compute contacts first (immutable field borrow), then
+                    // apply — avoids borrowing self.field while body is mut
+                    let mut contacts = [(0f32,0f32,0f32,0f32); 4];
+                    let mut nc = 0;
+                    for &(lx, lz) in &[
+                        (hx * 0.8, hz * 0.8),
+                        (hx * 0.8, -hz * 0.8),
+                        (-hx * 0.8, hz * 0.8),
+                        (-hx * 0.8, -hz * 0.8),
+                    ] {
+                        let w = rq * vector![lx, -hy + 0.01, lz];
+                        let (wx, wy, wz) = (pos.x + w.x, pos.y + w.y, pos.z + w.z);
+                        let gh = self.field.ground_height(wx, wz);
+                        let pen = gh + 0.01 - wy;
+                        if pen > 0.0 {
+                            contacts[nc] = (wx, wy, wz, pen);
+                            nc += 1;
+                        }
+                    }
+                    for &(wx, wy, wz, pen) in contacts.iter().take(nc) {
+                        let f = (9000.0 * pen - 500.0 * lv.y).max(0.0);
+                        body.add_force_at_point(
+                            vector![0.0, f, 0.0],
+                            point![wx, wy, wz],
+                            true,
+                        );
                     }
                 }
             }

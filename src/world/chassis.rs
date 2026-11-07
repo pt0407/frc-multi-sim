@@ -119,6 +119,12 @@ pub fn spawn_chassis(
     );
     let col = colliders.insert_with_parent(
         ColliderBuilder::cuboid(hx, hy, hz)
+            .collision_groups(
+                rapier3d::prelude::InteractionGroups::new(
+                    rapier3d::prelude::Group::GROUP_1,
+                    rapier3d::prelude::Group::GROUP_1,
+                ),
+            )
             .friction(0.04)
             // Min so chassis-vs-ground resolves to the 0.04 rolling
             // coefficient regardless of the ground's higher coefficient

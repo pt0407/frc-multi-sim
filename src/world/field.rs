@@ -364,6 +364,46 @@ impl FieldSpec {
 
     /// Number of fixed colliders this spec will produce
     /// (1 ground + walls + obstacles) — handy for tests.
+    /// Terrain height at (x, z) — floor is 0; ramp obstacles contribute
+    /// their trapezoid profile (matches the convex-hull collider shape:
+    /// plateau fraction 0.55 of the half-run, full height `half_extents[1]`).
+    /// Used for per-wheel spring support so chassis conforms to bumps
+    /// instead of bridging them as a rigid seesaw.
+    pub fn ground_height(&self, x: f32, z: f32) -> f32 {
+        let mut h = 0.0f32;
+        for o in &self.obstacles {
+            if let ObstacleSpec::Ramp {
+                pos,
+                half_extents,
+                slope_dir,
+                ..
+            } = o
+            {
+                let (ax, az, along_x) = if slope_dir[0].abs() > slope_dir[1].abs() {
+                    (half_extents[0], half_extents[2], true)
+                } else {
+                    (half_extents[2], half_extents[0], false)
+                };
+                let (d, across) = if along_x {
+                    ((x - pos[0]).abs(), (z - pos[2]).abs())
+                } else {
+                    ((z - pos[2]).abs(), (x - pos[0]).abs())
+                };
+                if across > az || d >= ax {
+                    continue;
+                }
+                let px = ax * 0.55;
+                let th = if d <= px {
+                    half_extents[1]
+                } else {
+                    half_extents[1] * (ax - d) / (ax - px)
+                };
+                h = h.max(th);
+            }
+        }
+        h
+    }
+
     pub fn collider_count(&self) -> usize {
         1 + self.walls.len() + self.obstacles.len()
     }
@@ -444,6 +484,17 @@ pub fn build_arena(
                 .collect();
                 ColliderBuilder::convex_hull(&pts)
                     .expect("bump wedge hull")
+                    // membership 0b10 / filter 0b01: default bodies (pieces,
+                    // other robots' non-chassis parts) collide; the chassis
+                    // collider (filter 0b01) does NOT — chassis rides bumps
+                    // via per-wheel spring support instead of seesawing
+                    // on the wedge (issue: rigid box can't crest).
+                    .collision_groups(
+                        rapier3d::prelude::InteractionGroups::new(
+                            rapier3d::prelude::Group::GROUP_2,
+                            rapier3d::prelude::Group::GROUP_1,
+                        ),
+                    )
                     .friction(*friction)
                     .restitution(*restitution)
             }
