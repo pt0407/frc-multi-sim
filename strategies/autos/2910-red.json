@@ -2,28 +2,123 @@
   "name": "2910-auto-red",
   "loop_actions": false,
   "actions": [
-    {"type":"shoot","launch_velocity":6.5,"hood_angle":1.2,"turret_yaw":0.0,"launch_height":0.6},
-    {"type":"wait","seconds":0.4},
-    {"type":"shoot","launch_velocity":6.5,"hood_angle":1.2,"turret_yaw":0.0,"launch_height":0.6},
-    {"type":"wait","seconds":0.4},
-    {"type":"shoot","launch_velocity":6.5,"hood_angle":1.2,"turret_yaw":0.0,"launch_height":0.6},
-    {"type":"wait","seconds":0.4},
-    {"type":"shoot","launch_velocity":6.5,"hood_angle":1.2,"turret_yaw":0.0,"launch_height":0.6},
-    {"type":"wait","seconds":0.5},
-    {"type":"goto","x":-4.5,"z":3.6},
-    {"type":"goto","x":-1.5,"z":3.6},
-    {"type":"goto","x":-0.3,"z":1.0},
-    {"type":"intake","active":true},
-    {"type":"wait","seconds":4.0},
-    {"type":"goto","x":-1.5,"z":3.6},
-    {"type":"goto","x":-4.5,"z":3.6},
-    {"type":"goto","x":-4.6,"z":0.0},
-    {"type":"shoot","launch_velocity":6.5,"hood_angle":1.2,"turret_yaw":0.0,"launch_height":0.6},
-    {"type":"wait","seconds":0.4},
-    {"type":"shoot","launch_velocity":6.5,"hood_angle":1.2,"turret_yaw":0.0,"launch_height":0.6},
-    {"type":"wait","seconds":0.4},
-    {"type":"shoot","launch_velocity":6.5,"hood_angle":1.2,"turret_yaw":0.0,"launch_height":0.6},
-    {"type":"intake","active":false},
-    {"type":"hold"}
+    {
+      "type": "shoot",
+      "launch_velocity": 6.5,
+      "hood_angle": 1.35,
+      "turret_yaw": 0.0,
+      "launch_height": 0.6
+    },
+    {
+      "type": "wait",
+      "seconds": 0.4
+    },
+    {
+      "type": "shoot",
+      "launch_velocity": 6.5,
+      "hood_angle": 1.35,
+      "turret_yaw": 0.0,
+      "launch_height": 0.6
+    },
+    {
+      "type": "wait",
+      "seconds": 0.4
+    },
+    {
+      "type": "shoot",
+      "launch_velocity": 6.5,
+      "hood_angle": 1.35,
+      "turret_yaw": 0.0,
+      "launch_height": 0.6
+    },
+    {
+      "type": "wait",
+      "seconds": 0.4
+    },
+    {
+      "type": "shoot",
+      "launch_velocity": 6.5,
+      "hood_angle": 1.35,
+      "turret_yaw": 0.0,
+      "launch_height": 0.6
+    },
+    {
+      "type": "wait",
+      "seconds": 0.5
+    },
+    {
+      "type": "goto",
+      "x": -4.5,
+      "z": 3.6
+    },
+    {
+      "type": "goto",
+      "x": -1.5,
+      "z": 3.6
+    },
+    {
+      "type": "goto",
+      "x": -0.3,
+      "z": 1.0
+    },
+    {
+      "type": "intake",
+      "active": true
+    },
+    {
+      "type": "wait",
+      "seconds": 4.0
+    },
+    {
+      "type": "goto",
+      "x": -1.5,
+      "z": 3.6
+    },
+    {
+      "type": "goto",
+      "x": -4.5,
+      "z": 3.6
+    },
+    {
+      "type": "goto",
+      "x": -4.5,
+      "z": 0.0
+    },
+    {
+      "type": "shoot",
+      "launch_velocity": 6.5,
+      "hood_angle": 1.35,
+      "turret_yaw": 0.0,
+      "launch_height": 0.6
+    },
+    {
+      "type": "wait",
+      "seconds": 0.4
+    },
+    {
+      "type": "shoot",
+      "launch_velocity": 6.5,
+      "hood_angle": 1.35,
+      "turret_yaw": 0.0,
+      "launch_height": 0.6
+    },
+    {
+      "type": "wait",
+      "seconds": 0.4
+    },
+    {
+      "type": "shoot",
+      "launch_velocity": 6.5,
+      "hood_angle": 1.35,
+      "turret_yaw": 0.0,
+      "launch_height": 0.6
+    },
+    {
+      "type": "intake",
+      "active": false
+    },
+    {
+      "type": "hold"
+    }
   ]
 }
