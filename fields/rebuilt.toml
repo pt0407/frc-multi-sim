@@ -80,29 +80,29 @@ restitution  = 0.1
 [[obstacles]]
 kind         = "box"
 name         = "trench-sw"
-pos          = [-3.645, 0.38, 2.95]
-half_extents = [0.60, 0.38, 0.50]
+pos          = [-3.645, 0.38, 2.60]
+half_extents = [0.60, 0.38, 0.20]
 friction     = 0.7
 
 [[obstacles]]
 kind         = "box"
 name         = "trench-nw"
-pos          = [-3.645, 0.38, -2.95]
-half_extents = [0.60, 0.38, 0.50]
+pos          = [-3.645, 0.38, -2.60]
+half_extents = [0.60, 0.38, 0.20]
 friction     = 0.7
 
 [[obstacles]]
 kind         = "box"
 name         = "trench-se"
-pos          = [3.645, 0.38, 2.95]
-half_extents = [0.60, 0.38, 0.50]
+pos          = [3.645, 0.38, 2.60]
+half_extents = [0.60, 0.38, 0.20]
 friction     = 0.7
 
 [[obstacles]]
 kind         = "box"
 name         = "trench-ne"
-pos          = [3.645, 0.38, -2.95]
-half_extents = [0.60, 0.38, 0.50]
+pos          = [3.645, 0.38, -2.60]
+half_extents = [0.60, 0.38, 0.20]
 friction     = 0.7
 
 # BUMP — GE-261xx assembly. Floor strip between each hub and trench,
@@ -110,32 +110,32 @@ friction     = 0.7
 [[obstacles]]
 kind         = "ramp"
 name         = "bump-s1"
-pos          = [-3.645, 0.085, 1.67]
-half_extents = [0.35, 0.085, 1.08]
+pos          = [-3.645, 0.03, 1.67]
+half_extents = [0.35, 0.03, 1.08]
 slope_dir    = [1.0, 0.0]
 friction     = 0.8
 
 [[obstacles]]
 kind         = "ramp"
 name         = "bump-n1"
-pos          = [-3.645, 0.085, -1.67]
-half_extents = [0.35, 0.085, 1.08]
+pos          = [-3.645, 0.03, -1.67]
+half_extents = [0.35, 0.03, 1.08]
 slope_dir    = [1.0, 0.0]
 friction     = 0.8
 
 [[obstacles]]
 kind         = "ramp"
 name         = "bump-s2"
-pos          = [3.645, 0.085, 1.67]
-half_extents = [0.35, 0.085, 1.08]
+pos          = [3.645, 0.03, 1.67]
+half_extents = [0.35, 0.03, 1.08]
 slope_dir    = [1.0, 0.0]
 friction     = 0.8
 
 [[obstacles]]
 kind         = "ramp"
 name         = "bump-n2"
-pos          = [3.645, 0.085, -1.67]
-half_extents = [0.35, 0.085, 1.08]
+pos          = [3.645, 0.03, -1.67]
+half_extents = [0.35, 0.03, 1.08]
 slope_dir    = [1.0, 0.0]
 friction     = 0.8
 

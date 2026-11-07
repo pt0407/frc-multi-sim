@@ -1,0 +1,9 @@
+{
+  "name": "teleop-park",
+  "loop_actions": true,
+  "actions": [
+    {"type":"goto","x":-4.6,"z":0.0},
+    {"type":"shoot","launch_velocity":6.5,"hood_angle":1.2,"turret_yaw":0.0,"launch_height":0.6},
+    {"type":"wait","seconds":0.5}
+  ]
+}
