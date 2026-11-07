@@ -622,6 +622,9 @@ impl World {
                 if !self.hub_active_at(a, self.tick) {
                     continue;
                 }
+                if std::env::var("FRS_SCORE_DEBUG").is_ok() {
+                    eprintln!("[score] hub@({:.2},{:.2}) a={} pos=({:.2},{:.2},{:.2})", hub.center[0], hub.center[1], a, pos[0], pos[1], pos[2]);
+                }
                 self.scores[a] += 1;
                 self.score_by_phase[a].add(phase, 1);
                 remove.push(pi);

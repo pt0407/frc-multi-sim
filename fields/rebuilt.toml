@@ -56,21 +56,88 @@ restitution  = 0.08
 # --- obstacles (GLB-derived bounding boxes; fallback when glb colliders off)
 # Source: Field3d_2026FRCFieldV1 model.glb node AABBs (see web/ASSETS.md).
 
-# HUB — GE-263xx assembly. Base plate 1.182 m square centered at x=±3.645,
-# front panel reaches x=±4.236, upper opening rim at y≈2.13.
+# HUB — GE-263xx assembly. The scoring mouth faces midfield (+x for the
+# west hub, -x for the east hub): back wall, two side walls, roof and floor
+# pan, open front down to the floor pan. A solid box would block every
+# realistic shot — real fuel enters through the mouth and drops into the
+# scoring volume (trigger in games/fuel.toml).
 [[obstacles]]
 kind         = "box"
-name         = "hub-west"
-pos          = [-3.645, 1.05, 0.0]
-half_extents = [0.60, 1.05, 0.60]
+name         = "hub-west-back"
+pos          = [-4.20, 1.05, 0.0]
+half_extents = [0.06, 1.05, 0.60]
 friction     = 0.7
 restitution  = 0.1
 
 [[obstacles]]
 kind         = "box"
-name         = "hub-east"
-pos          = [3.645, 1.05, 0.0]
-half_extents = [0.60, 1.05, 0.60]
+name         = "hub-west-side-n"
+pos          = [-3.70, 1.05, 0.55]
+half_extents = [0.55, 1.05, 0.06]
+friction     = 0.7
+restitution  = 0.1
+
+[[obstacles]]
+kind         = "box"
+name         = "hub-west-side-s"
+pos          = [-3.70, 1.05, -0.55]
+half_extents = [0.55, 1.05, 0.06]
+friction     = 0.7
+restitution  = 0.1
+
+[[obstacles]]
+kind         = "box"
+name         = "hub-west-roof"
+pos          = [-3.70, 2.00, 0.0]
+half_extents = [0.55, 0.11, 0.60]
+friction     = 0.7
+restitution  = 0.1
+
+[[obstacles]]
+kind         = "box"
+name         = "hub-west-floor"
+pos          = [-3.70, 0.05, 0.0]
+half_extents = [0.55, 0.05, 0.60]
+friction     = 0.7
+restitution  = 0.1
+
+[[obstacles]]
+kind         = "box"
+name         = "hub-east-back"
+pos          = [4.20, 1.05, 0.0]
+half_extents = [0.06, 1.05, 0.60]
+friction     = 0.7
+restitution  = 0.1
+
+[[obstacles]]
+kind         = "box"
+name         = "hub-east-side-n"
+pos          = [3.70, 1.05, 0.55]
+half_extents = [0.55, 1.05, 0.06]
+friction     = 0.7
+restitution  = 0.1
+
+[[obstacles]]
+kind         = "box"
+name         = "hub-east-side-s"
+pos          = [3.70, 1.05, -0.55]
+half_extents = [0.55, 1.05, 0.06]
+friction     = 0.7
+restitution  = 0.1
+
+[[obstacles]]
+kind         = "box"
+name         = "hub-east-roof"
+pos          = [3.70, 2.00, 0.0]
+half_extents = [0.55, 0.11, 0.60]
+friction     = 0.7
+restitution  = 0.1
+
+[[obstacles]]
+kind         = "box"
+name         = "hub-east-floor"
+pos          = [3.70, 0.05, 0.0]
+half_extents = [0.55, 0.05, 0.60]
 friction     = 0.7
 restitution  = 0.1
 

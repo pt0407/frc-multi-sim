@@ -228,11 +228,15 @@ pub fn intake_contains(
 }
 
 /// Downward entry test for a hub zone (FuelSim `didFuelScore`): inside the
-/// radius in x/z, at/below the entry plane, and moving down.
+/// radius in x/z, at/below the entry plane, and moving down. Pieces rolling
+/// on the floor (center height ≈ ball radius) cannot enter a real hub —
+/// require the piece to be well off the ground so scattered fuel doesn't
+/// roll in and score.
 pub fn hub_scores(hub: &HubZone, pos: &[f32; 3], vel: &[f32; 3]) -> bool {
     let dx = pos[0] - hub.center[0];
     let dz = pos[2] - hub.center[1];
     dx * dx + dz * dz <= hub.radius * hub.radius
         && pos[1] <= hub.entry_height
+        && pos[1] >= 0.3
         && vel[1] < 0.0
 }
