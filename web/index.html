@@ -96,7 +96,7 @@
       <select id="d-robot" style="background:#1f2937;color:#dfe6ee;border:1px solid #374151;border-radius:6px;padding:6px;font:600 12px monospace"></select>
       <button id="d-connect" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:6px 12px;font:700 12px monospace;cursor:pointer">connect</button>
     </div>
-    <div id="d-status" style="font-size:10px;color:#6b7280">W/S drive · A/D turn · I intake · J shoot · K shooter</div>
+    <div id="d-status" style="font-size:10px;color:#6b7280">W/S drive · A/D turn · I intake · J shoot · K shooter · U/O arm</div>
   </div>
 
   <div id="telem"><b>telemetry</b><br>…</div>
@@ -192,13 +192,17 @@
       dRobot.appendChild(o);
     }
     const keys = new Set();
-    let dws = null, pendingShoot = false, shooterOn = false, dFrame = null;
+    let dws = null, pendingShoot = false, shooterOn = false, dFrame = null, mechTarget = null;
     addEventListener("keydown", e => {
       if (e.target.tagName === "SELECT" || e.target.tagName === "INPUT") return;
       const k = e.key.toLowerCase();
       keys.add(k);
       if (k === "j" && dws && dws.readyState === 1) pendingShoot = true;
       if (k === "k" && dws && dws.readyState === 1) { shooterOn = !shooterOn; }
+      // mech arm: U stow, O deploy (position-servo targets; 2910 limits
+      // are -0.5..1.3 rad — clamped server-side anyway)
+      if (k === "u" && dws && dws.readyState === 1) mechTarget = -0.4;
+      if (k === "o" && dws && dws.readyState === 1) mechTarget = 1.2;
     });
     addEventListener("keyup", e => keys.delete(e.key.toLowerCase()));
     addEventListener("blur", () => keys.clear());
@@ -213,7 +217,7 @@
         else if (m.type === "Error") { dStat.textContent = "rejected: " + m.message; dws.close(); }
         else if (m.type === "Sensor") dFrame = m;
       };
-      dws.onclose = () => { dws = null; dFrame = null; dConn.textContent = "connect"; dStat.textContent = "disconnected"; };
+      dws.onclose = () => { dws = null; dFrame = null; mechTarget = null; dConn.textContent = "connect"; dStat.textContent = "disconnected"; };
     };
     setInterval(() => {
       if (!dws || dws.readyState !== 1) return;
@@ -229,6 +233,7 @@
         torque: 120 * turn,
         intake_active: keys.has("i"),
         shooter_on: shooterOn,
+        mech: mechTarget === null ? null : {target: mechTarget},
         shoot: pendingShoot ? {launch_velocity: 12.0, hood_angle: 0.6, turret_yaw: 0.0, launch_height: 0.6} : null,
       };
       pendingShoot = false;
