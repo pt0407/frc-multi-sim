@@ -585,19 +585,26 @@ impl World {
         // (chassis-frame offset rotated by yaw, riding at hopper height).
         // Set before pipeline.step so Rapier moves them with the robot.
         for c in &self.carried {
-            let (rpos, ryaw) = {
-                let b = &self.bodies[self.chassis[c.robot]];
-                let r = b.rotation();
-                let t = b.translation();
-                ([t.x, t.y, t.z], yaw_from_quat([r.i, r.j, r.k, r.w]))
+            // anchor rides the mechanism arm when the robot has one —
+            // the piece visibly travels with the intake arm from scoop
+            // to stowed carry position (MoSim path-graph equivalent)
+            let anchor = if let Some(ap) = self.mech_arm_position(c.robot) {
+                [ap[0], ap[1] + 0.12, ap[2]]
+            } else {
+                let (rpos, ryaw) = {
+                    let b = &self.bodies[self.chassis[c.robot]];
+                    let r = b.rotation();
+                    let t = b.translation();
+                    ([t.x, t.y, t.z], yaw_from_quat([r.i, r.j, r.k, r.w]))
+                };
+                let (s, co) = ryaw.sin_cos();
+                // anchor: front of the chassis at hopper height
+                [
+                    rpos[0] + 0.30 * co,
+                    rpos[1] + 0.45,
+                    rpos[2] - 0.30 * s,
+                ]
             };
-            let (s, co) = ryaw.sin_cos();
-            // anchor: front of the chassis at hopper height
-            let anchor = [
-                rpos[0] + 0.30 * co,
-                rpos[1] + 0.45,
-                rpos[2] - 0.30 * s,
-            ];
             let body = &mut self.bodies[c.handle];
             body.set_next_kinematic_translation(vector![anchor[0], anchor[1], anchor[2]]);
         }
