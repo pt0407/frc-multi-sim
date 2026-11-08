@@ -237,3 +237,38 @@ fn six_mech_robots_perf_smoke() {
         "mechanism overhead >3x baseline ({mechd:.1} vs {base:.1} µs)"
     );
 }
+
+/// Torque-limited arm: `motor_max_force` caps what the servo can
+/// transmit, so a weak motor stalls short of the stow target instead of
+/// phasing through whatever resists it (lifting against gravity counts).
+#[test]
+fn arm_motor_torque_limit_stalls_short_of_target() {
+    let run = |max_force: f32| -> f32 {
+        let mut specs = chassis::default_specs();
+        let mut arm = arm_spec();
+        arm.motor_max_force = max_force;
+        arm.stow_angle = -0.5; // spawn deployed, low to the ground
+        specs[0].mechs = vec![arm];
+        let table = PieceTable::default();
+        let mut w = World::with_config(&specs, SEED, FieldSpec::default(), &table);
+        // command the arm back up to stow (+1.3 rad) — a lift
+        let mut lift = deploy_cmd();
+        lift.mech = Some(MechCommand { joint: 0, target: 1.3 });
+        let mut cmds: Vec<Option<ActuatorFrame>> = vec![None; w.num_robots()];
+        cmds[0] = Some(lift);
+        for _ in 0..800 {
+            w.step(&cmds);
+        }
+        w.mech_angle(0).unwrap()
+    };
+    let strong = run(400.0);
+    let weak = run(5.0);
+    assert!(
+        strong > 1.0,
+        "strong motor should reach stow, got {strong}"
+    );
+    assert!(
+        weak < strong - 0.3,
+        "weak motor should stall well short: strong={strong} weak={weak}"
+    );
+}
