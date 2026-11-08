@@ -22,7 +22,7 @@ fn spec(name: &str) -> RobotSpec {
 /// "model missing / wrong URL" silently before the browser does.
 #[test]
 fn all_archetype_model_urls_resolve() {
-    for name in ["2910", "bananasplit", "crabbot", "duckbot", "intake-bot"] {
+    for name in ["2910", "4414", "bananasplit", "crabbot", "duckbot", "intake-bot"] {
         let a = Archetype::load(Path::new(&format!("archetypes/{name}.toml"))).unwrap();
         let url = a.model.as_ref().unwrap().url.clone();
         let path = Path::new("web/public").join(url.trim_start_matches('/'));
@@ -34,7 +34,7 @@ fn all_archetype_model_urls_resolve() {
 /// the "floating robot / wrong scale" bug without needing the GLB.
 #[test]
 fn collider_matches_archetype_dims() {
-    for name in ["2910", "bananasplit", "crabbot", "duckbot", "intake-bot"] {
+    for name in ["2910", "4414", "bananasplit", "crabbot", "duckbot", "intake-bot"] {
         let a = Archetype::load(Path::new(&format!("archetypes/{name}.toml"))).unwrap();
         let spec = RobotSpec::from_archetype(&a, [0.0, 0.0]);
         // half_extents[1] should be ~half the real robot height
