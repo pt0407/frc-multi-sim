@@ -281,6 +281,7 @@ mod tests {
             launch_radius: None,
             muzzle_pos: None,
             feed_time: None,
+            feed_path: None,
             on_arm: false,
         }
     }

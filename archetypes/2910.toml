@@ -108,6 +108,9 @@ launch_radius = 0.031
 # muzzle in chassis frame: shooter exits forward of the CoM at mechanism
 # height — pieces launch from here, not the chassis center
 muzzle_pos = [0.40, 0.55, 0.0]
+# feed path: carried fuel routes up through the hopper throat before the
+# muzzle instead of sliding in a straight line (MoSim path-graph nodes)
+feed_path = [[0.34, 0.50, 0.0]]
 
 # hood: the pivoting deflector (32-17 Hood Assembly) is a physical
 # position joint tracking the shot's hood_angle — launch elevation uses

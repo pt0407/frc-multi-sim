@@ -357,6 +357,12 @@ pub struct JointSpec {
     /// (default 0.15). 0 = instant release at the muzzle.
     #[serde(default)]
     pub feed_time: Option<f32>,
+    /// feed path waypoints in chassis frame [x,y,z], traversed in order
+    /// between the carry anchor and the muzzle — mechanism-specific
+    /// routing (hopper -> shooter throat) instead of a straight line.
+    /// Unset/empty = direct anchor -> muzzle lerp.
+    #[serde(default)]
+    pub feed_path: Option<Vec<[f32; 3]>>,
 }
 
 fn jm_spin() -> JointMode {

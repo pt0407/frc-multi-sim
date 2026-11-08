@@ -661,21 +661,21 @@ impl World {
             // anchor rides the mechanism arm when the robot has one —
             // the piece visibly travels with the intake arm from scoop
             // to stowed carry position (MoSim path-graph equivalent)
+            let (cpos, cyaw) = {
+                let b = &self.bodies[self.chassis[c.robot]];
+                let r = b.rotation();
+                let t = b.translation();
+                ([t.x, t.y, t.z], yaw_from_quat([r.i, r.j, r.k, r.w]))
+            };
             let anchor = if let Some(ap) = self.mech_arm_position(c.robot) {
                 [ap[0], ap[1] + 0.12, ap[2]]
             } else {
-                let (rpos, ryaw) = {
-                    let b = &self.bodies[self.chassis[c.robot]];
-                    let r = b.rotation();
-                    let t = b.translation();
-                    ([t.x, t.y, t.z], yaw_from_quat([r.i, r.j, r.k, r.w]))
-                };
-                let (s, co) = ryaw.sin_cos();
+                let (s, co) = cyaw.sin_cos();
                 // anchor: front of the chassis at hopper height
                 [
-                    rpos[0] + 0.30 * co,
-                    rpos[1] + 0.45,
-                    rpos[2] - 0.30 * s,
+                    cpos[0] + 0.30 * co,
+                    cpos[1] + 0.45,
+                    cpos[2] - 0.30 * s,
                 ]
             };
             // feeding pieces travel anchor -> live muzzle position so a
@@ -691,11 +691,49 @@ impl World {
                     self.joints.get(c.robot),
                     &f.shot,
                 );
-                [
-                    anchor[0] + (muzzle[0] - anchor[0]) * e,
-                    anchor[1] + (muzzle[1] - anchor[1]) * e,
-                    anchor[2] + (muzzle[2] - anchor[2]) * e,
-                ]
+                // authored feed_path waypoints (chassis frame) route the
+                // piece through the mechanism — hopper -> shooter throat —
+                // instead of a straight anchor->muzzle line
+                let wps = self
+                    .joints
+                    .get(c.robot)
+                    .into_iter()
+                    .flatten()
+                    .find(|j| {
+                        j.spec.driver == crate::archetype::JointDriver::Shooter
+                    })
+                    .and_then(|j| j.spec.feed_path.as_ref())
+                    .filter(|p| !p.is_empty());
+                match wps {
+                    Some(wps) => {
+                        let (s, co) = cyaw.sin_cos();
+                        let mut path = Vec::with_capacity(wps.len() + 2);
+                        path.push(anchor);
+                        for w in wps {
+                            path.push([
+                                cpos[0] + w[0] * co + w[2] * s,
+                                cpos[1] + w[1],
+                                cpos[2] - w[0] * s + w[2] * co,
+                            ]);
+                        }
+                        path.push(muzzle);
+                        let segs = path.len() - 1;
+                        let u = e * segs as f32;
+                        let i = (u.floor() as usize).min(segs - 1);
+                        let lt = (u - i as f32).clamp(0.0, 1.0);
+                        let (a, b) = (path[i], path[i + 1]);
+                        [
+                            a[0] + (b[0] - a[0]) * lt,
+                            a[1] + (b[1] - a[1]) * lt,
+                            a[2] + (b[2] - a[2]) * lt,
+                        ]
+                    }
+                    None => [
+                        anchor[0] + (muzzle[0] - anchor[0]) * e,
+                        anchor[1] + (muzzle[1] - anchor[1]) * e,
+                        anchor[2] + (muzzle[2] - anchor[2]) * e,
+                    ],
+                }
             } else {
                 anchor
             };

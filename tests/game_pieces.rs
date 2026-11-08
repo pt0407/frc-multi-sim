@@ -550,6 +550,7 @@ fn roller_axis_surface_velocity_sets_push_direction() {
         launch_radius: None,
         muzzle_pos: None,
         feed_time: None,
+        feed_path: None,
         on_arm: false,
     };
     // intake region parked far ahead so rollers spin without capturing
@@ -588,4 +589,84 @@ fn roller_axis_surface_velocity_sets_push_direction() {
     // axis -z reverses the surface velocity: piece is driven back -x
     let neg_x = run([0.0, 0.0, -1.0]);
     assert!(neg_x < 0.6, "-z axis should push piece -x, got x={neg_x}");
+}
+
+/// Authored `feed_path` waypoints route the carried piece through the
+/// mechanism (hopper throat) instead of a straight anchor->muzzle line.
+#[test]
+fn feed_path_routes_piece_through_waypoints() {
+    use frc_sim_m0::archetype::{JointDriver, JointMode, JointSpec};
+
+    let shooter = JointSpec {
+        name: "shooter".into(),
+        mv: "shooter".into(),
+        scope: None,
+        mode: JointMode::Spin,
+        driver: JointDriver::Shooter,
+        axis: None,
+        pivot: None,
+        max_vel: 50.0,
+        accel: 2000.0,
+        limits: None,
+        wheel_radius: 0.0,
+        roller_pos: None,
+        roller_radius: None,
+        roller_axis: None,
+        launch_radius: None,
+        muzzle_pos: Some([0.4, 0.55, 0.0]),
+        feed_time: Some(0.4),
+        // waypoint high above the direct anchor->muzzle line
+        feed_path: Some(vec![[0.0, 0.9, 0.0]]),
+        on_arm: false,
+    };
+    let mut specs = chassis::default_specs();
+    specs[0].spawn = [-4.0, specs[0].spawn[1], 0.0];
+    specs[0].intake = Some(intake_spec());
+    specs[0].joints = vec![shooter];
+    let t = PieceTable {
+        points: vec![],
+        zones: vec![SpawnZone {
+            center: [-3.4, 0.0],
+            half_extents: [0.01, 0.01],
+            count: 1,
+        }],
+        hubs: vec![],
+    };
+    let mut w = World::with_config(&specs, SEED, FieldSpec::default(), &t);
+    let mut intake_on = cmd();
+    intake_on.intake_active = true;
+    for _ in 0..40 {
+        w.step(&[Some(intake_on.clone()), None]);
+    }
+    assert_eq!(w.held[0], 1, "piece should be captured");
+
+    let mut shot = cmd();
+    shot.shoot = Some(ShotCommand {
+        launch_velocity: 5.0,
+        hood_angle: 0.5,
+        turret_yaw: 0.0,
+        launch_height: 0.6,
+    });
+    // hold the shot request until the flywheel reaches speed and the
+    // feed commits (held decrements when the feed starts)
+    for _ in 0..300 {
+        w.step(&[Some(shot.clone()), None]);
+        if w.held[0] == 0 {
+            break;
+        }
+    }
+    assert_eq!(w.held[0], 0, "shot should have committed the feed");
+
+    // ~half-way through the 0.4 s feed the eased progress is ~0.5, which
+    // lands the piece on the high waypoint (world y ≈ 1.3) — a straight
+    // anchor->muzzle lerp would still be near y ≈ 0.9
+    for _ in 0..80 {
+        w.step(&[Some(cmd()), None]);
+    }
+    let p = w.piece_positions()[0];
+    assert!(
+        p[1] > 1.1,
+        "feed path should lift the piece through the waypoint, y={}",
+        p[1]
+    );
 }
