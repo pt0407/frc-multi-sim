@@ -117,6 +117,14 @@ pub struct World {
     /// out-of-bounds pieces on their 3 s return timer (MoSim return
     /// points — fuel that leaves the field comes back into play)
     returning: Vec<ReturnState>,
+    /// last robot to capture each piece (MoSim HasOwner/OwnedBy — piece
+    /// possession persists through carry and release)
+    piece_owner: Vec<(RigidBodyHandle, usize)>,
+    /// zone-shot penalty (MoSim ZoneShotsPenalty): instances per
+    /// alliance, consecutive-event counter, last event tick
+    zone_penalty_instances: [u32; 2],
+    zone_penalty_consec: u32,
+    zone_penalty_last_tick: Option<u64>,
     /// per-robot held-piece inventory, fed by intake captures and consumed
     /// by shots
     pub held: Vec<u32>,
@@ -216,6 +224,10 @@ impl World {
             carried: Vec::new(),
             hub_held: Vec::new(),
             returning: Vec::new(),
+            piece_owner: Vec::new(),
+            zone_penalty_instances: [0; 2],
+            zone_penalty_consec: 0,
+            zone_penalty_last_tick: None,
             held: vec![0; specs.len()],
             scores: [0; 2],
             hubs: table.hubs.clone(),
@@ -774,6 +786,26 @@ impl World {
 
     /// One-shot endgame bonus: each robot within horizontal
     /// `climb_radius_m` of any field climb point scores
+    /// Is robot `i` inside its own alliance zone — own half of the field
+    /// past ~45% out (MoSim InAllianceZone: Blue x>4.25, Red x<-4.25 on
+    /// their ~9.4 m field; scaled to our 8.27 m tile).
+    fn robot_in_alliance_zone(&self, robot: usize) -> bool {
+        let t = self.bodies[self.chassis[robot]].translation();
+        let thresh = FIELD_HALF_X * 0.45;
+        if robot % 2 == 0 {
+            t.x < -thresh
+        } else {
+            t.x > thresh
+        }
+    }
+
+    /// Zone-shot penalty instances per alliance (MoSim
+    /// ZoneShotsPenalty.Red/BlueInstances) — subtracted from the final
+    /// score by whatever consumes match results.
+    pub fn zone_penalty_instances(&self) -> [u32; 2] {
+        self.zone_penalty_instances
+    }
+
     /// `climb_bonus_points` for its alliance (counted in the endgame
     /// bucket). Real rigid-body climb joints are B3 follow-up; this ties
     /// the placeholder to the field spec's climb-point anchors.
@@ -920,6 +952,10 @@ impl World {
                         });
                         // an intaked piece can't also be returning
                         self.returning.retain(|r| r.handle != *h);
+                        // MoSim HasOwner: possession persists through
+                        // carry and release for zone-shot penalties
+                        self.piece_owner.retain(|(oh, _)| *oh != *h);
+                        self.piece_owner.push((*h, i));
                         captured = true;
                         break;
                     }
@@ -951,6 +987,38 @@ impl World {
                 }
                 self.scores[a] += 1;
                 self.score_by_phase[a].add(phase, 1);
+                // zone-shot penalty (MoSim "404"): a scored piece still
+                // owned by a robot that is OUTSIDE its alliance zone
+                // counts toward ZoneShotsPenalty — 3rd consecutive event
+                // within 5 s = 3 instances, each further = 1
+                if let Some((_, owner)) = self
+                    .piece_owner
+                    .iter()
+                    .find(|(oh, _)| *oh == *h)
+                {
+                    let owner = *owner;
+                    if !self.robot_in_alliance_zone(owner) {
+                        const WINDOW_TICKS: u64 =
+                            (5.0 * PHYSICS_HZ) as u64;
+                        self.zone_penalty_consec = match self.zone_penalty_last_tick
+                        {
+                            Some(t) if self.tick - t < WINDOW_TICKS => {
+                                self.zone_penalty_consec + 1
+                            }
+                            _ => 1,
+                        };
+                        self.zone_penalty_last_tick = Some(self.tick);
+                        let num = if self.zone_penalty_consec == 3 {
+                            3
+                        } else if self.zone_penalty_consec > 3 {
+                            1
+                        } else {
+                            0
+                        };
+                        let oa = owner % 2;
+                        self.zone_penalty_instances[oa] += num;
+                    }
+                }
                 // capture into the hub: kinematic, zero velocity, sensor
                 // collider — it rests inside the scorer, out of play
                 {

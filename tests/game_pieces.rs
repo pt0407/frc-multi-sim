@@ -163,6 +163,61 @@ fn carried_piece_feeds_to_muzzle_before_launch() {
     );
 }
 
+/// Zone-shot penalty (MoSim "404"): pieces owned by a robot scoring
+/// while that robot is OUTSIDE its alliance zone accumulate penalty
+/// instances — 3rd consecutive event within 5 s = +3.
+#[test]
+fn zone_shot_penalty_counts_out_of_zone_owner() {
+    let mut specs = chassis::default_specs();
+    // robot 0 (alliance 0 = -x side) parked at x=+6 — outside its zone
+    specs[0].spawn = [6.0, specs[0].spawn[1], 0.0];
+    specs[0].intake = Some(intake_spec());
+    let t = PieceTable {
+            points: vec![],
+        zones: vec![SpawnZone {
+            center: [6.6, 0.0],
+            half_extents: [0.05, 0.4],
+            count: 3,
+        }],
+        hubs: vec![HubZone {
+            center: [4.0, 0.0],
+            radius: 0.8,
+            entry_height: 1.0,
+            alliance: 0,
+        }],
+    };
+    let mut w = World::with_config(&specs, SEED, FieldSpec::default(), &t);
+    let mut intake_on = cmd();
+    intake_on.intake_active = true;
+    for _ in 0..40 {
+        w.step(&[Some(intake_on.clone()), None]);
+    }
+    assert_eq!(w.held[0], 3, "three pieces should be captured");
+
+    // three shots backward (-x) into the hub; each press feeds then
+    // releases ~0.55 s later, all within the 5 s penalty window
+    for _ in 0..3 {
+        let mut shot = cmd();
+        shot.shoot = Some(ShotCommand {
+            launch_velocity: 6.0,
+            hood_angle: 0.15,
+            turret_yaw: std::f32::consts::PI,
+            launch_height: 0.6,
+        });
+        w.step(&[Some(shot), None]);
+        for _ in 0..250 {
+            w.step(&[Some(cmd()), None]);
+        }
+    }
+    assert_eq!(w.scores[0], 3, "all three shots should score");
+    // events 1-2 count toward the streak but award nothing; event 3
+    // (consecutive == 3) awards +3 instances to alliance 0
+    assert_eq!(
+        w.zone_penalty_instances()[0], 3,
+        "third consecutive zone shot should penalize +3"
+    );
+}
+
 /// MoSim return points: a piece outside the field bounds is flagged,
 /// sits 3 s, then teleports back inside on its alliance side.
 #[test]
