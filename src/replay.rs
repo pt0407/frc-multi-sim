@@ -352,6 +352,9 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
                                 z_max: r_f32(&mut r)?,
                                 y_min: r_f32(&mut r)?,
                                 y_max: r_f32(&mut r)?,
+                                // capacity added after replay fmt v1 — old
+                                // logs reconstruct with the default hopper
+                                capacity: None,
                             })
                         } else {
                             None

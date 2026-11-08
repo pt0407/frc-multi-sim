@@ -12,6 +12,7 @@ fn intake_captures_in_pile() {
     spec.intake = Some(IntakeSpec {
         x_min: 0.3, x_max: 0.95, z_min: -0.55, z_max: 0.55,
         y_min: -0.35, y_max: 0.05,
+                        capacity: None,
     });
     let field = FieldSpec::load(std::path::Path::new("fields/rebuilt.toml")).unwrap();
     let table = PieceTable::load(std::path::Path::new("games/fuel.toml")).unwrap();

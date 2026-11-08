@@ -725,12 +725,19 @@ impl World {
             }
             for (i, robot) in robots.iter().enumerate() {
                 if let Some((rpos, ryaw)) = robot {
-                    if pieces::intake_contains(
-                        &self.intakes[i].unwrap(),
-                        rpos,
-                        *ryaw,
-                        &pos,
-                    ) {
+                    // hopper capacity: the mechanism physically can't hold
+                    // more than `capacity` pieces (carried + preload)
+                    let capacity = self.intakes[i]
+                        .and_then(|s| s.capacity)
+                        .unwrap_or(crate::archetype::HOPPER_DEFAULT);
+                    if self.held[i] < capacity
+                        && pieces::intake_contains(
+                            &self.intakes[i].unwrap(),
+                            rpos,
+                            *ryaw,
+                            &pos,
+                        )
+                    {
                         self.held[i] += 1;
                         // carry, don't despawn: kinematic body glued to the
                         // robot's carry anchor until shot or match end.

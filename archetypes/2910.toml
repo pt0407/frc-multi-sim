@@ -27,6 +27,8 @@ z_min = -0.55
 z_max = 0.55
 y_min = -0.55
 y_max = 0.0
+# hopper capacity: preload 8 + room for a few more scoops before it jams
+capacity = 12
 
 # intake arm — pivots at the front bumper, deploys down to scoop fuel.
 # Deployed (<0.5 rad) is required for intake captures; the arm tip also

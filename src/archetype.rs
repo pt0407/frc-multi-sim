@@ -163,7 +163,15 @@ pub struct IntakeSpec {
     /// capture region vertical bounds relative to chassis center
     pub y_min: f32,
     pub y_max: f32,
+    /// hopper capacity: max total held pieces (carried + preload) the
+    /// mechanism can physically hold. `None` = HOPPER_DEFAULT (16).
+    #[serde(default)]
+    pub capacity: Option<u32>,
 }
+
+/// Default hopper capacity when `[intake]` doesn't set one — a realistic
+/// fuel count for a mid-size hopper (preload 8 + a few scoops).
+pub const HOPPER_DEFAULT: u32 = 16;
 
 /// Articulated mechanism spec (issue #57 spike): ONE revolute arm hung off
 /// the chassis — the intake-arm pattern. The arm is a cuboid rigid body

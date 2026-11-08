@@ -22,6 +22,7 @@ fn intake_spec() -> IntakeSpec {
         z_max: 0.4,
         y_min: -0.45,
         y_max: 0.0,
+                        capacity: None,
     }
 }
 
