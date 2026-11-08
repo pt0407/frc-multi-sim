@@ -414,6 +414,13 @@ pub struct JointSpec {
     /// robot's interpolation table.
     #[serde(default)]
     pub shot_table: Option<Vec<ShotPreset>>,
+    /// SWM shoot-on-move: when true on a `driver = "turret"` joint, the
+    /// turret aim target gets chassis-velocity lead compensation (MoSim
+    /// `GetShootOnMoveTarget`). This is *team-code behavior* — only set
+    /// it for robots whose real code runs SWM; default off so a bot
+    /// without shoot-on-move doesn't get it for free.
+    #[serde(default)]
+    pub swm_lead: bool,
 }
 
 fn jm_spin() -> JointMode {

@@ -1466,7 +1466,13 @@ impl World {
             None => return 0.0,
         };
         let js = match self.joints.get(i) {
-            Some(j) if j.iter().any(|j| j.spec.driver == crate::archetype::JointDriver::Turret) => j,
+            Some(j)
+                if j.iter().any(|j| {
+                    j.spec.driver == crate::archetype::JointDriver::Turret && j.spec.swm_lead
+                }) =>
+            {
+                j
+            }
             _ => return 0.0,
         };
         // launch speed: physics-derived from flywheel ω when the shooter

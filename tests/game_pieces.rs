@@ -552,6 +552,7 @@ fn roller_axis_surface_velocity_sets_push_direction() {
         feed_time: None,
         feed_path: None,
             shot_table: None,
+            swm_lead: false,
         on_arm: false,
     };
     // intake region parked far ahead so rollers spin without capturing
@@ -620,6 +621,7 @@ fn feed_path_routes_piece_through_waypoints() {
         feed_path: Some(vec![[0.0, 0.9, 0.0]]),
         on_arm: false,
         shot_table: None,
+            swm_lead: false,
     };
     let mut specs = chassis::default_specs();
     specs[0].spawn = [-4.0, specs[0].spawn[1], 0.0];
@@ -704,6 +706,7 @@ fn shot_table_scales_flywheel_by_hub_distance() {
             ShotPreset { distance: 1.0, flywheel: 0.4, hood: 0.2 },
             ShotPreset { distance: 5.0, flywheel: 0.8, hood: 0.6 },
         ]),
+        swm_lead: false,
     };
     let mut specs = chassis::default_specs();
     specs[0].spawn = [-4.0, specs[0].spawn[1], 0.0];

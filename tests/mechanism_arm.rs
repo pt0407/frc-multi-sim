@@ -153,6 +153,7 @@ fn arm_roller_joint() -> JointSpec {
         feed_time: None,
         feed_path: None,
             shot_table: None,
+            swm_lead: false,
         on_arm: true,
     }
 }

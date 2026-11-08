@@ -47,6 +47,7 @@ motor_max_force = 400.0
 name = "turret"
 mode = "position"
 driver = "turret"
+swm_lead = true   # MoSim SWM shoot-on-move (team-code behavior, opt-in)
 mv = 'turret|Turret'
 max_vel = 6.0    # rad/s slew
 accel = 18.0
