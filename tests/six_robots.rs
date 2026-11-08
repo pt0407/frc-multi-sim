@@ -39,11 +39,11 @@ fn default_lineup_is_six_robots_in_alliance_rows() {
             "robot {i} station z"
         );
     }
-    // robots 0/1 keep the historical 2-robot spawns
-    assert_eq!(specs[0].spawn[0], -4.8);
-    assert_eq!(specs[0].spawn[2], 0.0);
-    assert_eq!(specs[1].spawn[0], 4.8);
-    assert_eq!(specs[1].spawn[2], 0.0);
+    // robots 0/1 take the outer stations (z=∓1.517)
+    assert_eq!(specs[0].spawn[0], -chassis::ALLIANCE_X);
+    assert_eq!(specs[0].spawn[2], -chassis::STATION_SPACING);
+    assert_eq!(specs[1].spawn[0], chassis::ALLIANCE_X);
+    assert_eq!(specs[1].spawn[2], -chassis::STATION_SPACING);
     // all six spawn poses are distinct
     for i in 0..specs.len() {
         for j in (i + 1)..specs.len() {

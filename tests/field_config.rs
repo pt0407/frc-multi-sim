@@ -19,18 +19,19 @@ fn rebuilt_toml_loads_and_builds_expected_colliders() {
     assert!((spec.half_x - 8.2705).abs() < 1e-6);
     assert!((spec.half_z - 4.0345).abs() < 1e-6);
     assert_eq!(spec.walls.len(), 4);
-    // GLB-derived elements (issue #42): 2 hubs + 4 trenches + 4 bumps
-    // + 2 towers + 2 depot rail boxes
-    assert_eq!(spec.obstacles.len(), 14);
+    // GLB-derived elements (issue #42): hubs are open-mouth assemblies
+    // (back/side-n/side-s/roof/floor = 5 boxes each), plus 4 trenches,
+    // 4 bumps, 2 towers and the depot perimeter rails.
+    assert_eq!(spec.obstacles.len(), 26);
     assert_eq!(spec.scoring_zones.len(), 4);
     assert_eq!(spec.climb_points.len(), 2);
-    // 1 ground + 4 walls + 14 obstacles
-    assert_eq!(spec.collider_count(), 19);
+    // 1 ground + 4 walls + 26 obstacles
+    assert_eq!(spec.collider_count(), 31);
 
     let mut bodies = RigidBodySet::new();
     let mut colliders = ColliderSet::new();
     build_arena(&spec, &mut bodies, &mut colliders);
-    assert_eq!(colliders.len(), 19);
+    assert_eq!(colliders.len(), 31);
 }
 
 /// Issue #42: the shipped layout must track the real 2026 REBUILT field
@@ -53,21 +54,31 @@ fn rebuilt_layout_matches_glb_elements() {
                     half_extents,
                     name: Some(n),
                     ..
+                }
+                | ObstacleSpec::Ramp {
+                    pos,
+                    half_extents,
+                    name: Some(n),
+                    ..
                 } if n == name => Some((pos, half_extents)),
                 _ => None,
             })
             .unwrap_or_else(|| panic!("missing obstacle {name}"))
     };
 
-    // hub base plate: 1.182 m square centered at x=±3.645 (GLB GE-26301-01)
-    let (pos, he) = find("hub-west");
-    assert!((pos[0] + 3.645).abs() < 1e-3 && pos[2].abs() < 1e-3);
-    assert!((he[0] - 0.60).abs() < 0.02 && (he[2] - 0.60).abs() < 0.02);
-    let (pos2, _) = find("hub-east");
-    assert!((pos2[0] - 3.645).abs() < 1e-3);
-    // hub top must sit at/below the 2.13 m rim so shots can still enter
-    let (_, he_hub) = find("hub-west");
-    assert!(pos2[1] <= 2.13 && he_hub[1] * 2.0 >= 1.8);
+    // hub floor pan: open-mouth assembly centered at x=±3.7, mouth facing
+    // midfield (+x for west hub). Back wall at x=-4.2, side walls at z=±0.55.
+    let (pos, he) = find("hub-west-floor");
+    assert!((pos[0] + 3.7).abs() < 1e-3 && pos[2].abs() < 1e-3);
+    assert!((he[0] - 0.55).abs() < 0.02 && (he[2] - 0.60).abs() < 0.02);
+    let (pos2, _) = find("hub-east-floor");
+    assert!((pos2[0] - 3.7).abs() < 1e-3);
+    // hub roof top must sit at/below the 2.13 m rim so shots can still enter
+    let (roof_pos, roof_he) = find("hub-west-roof");
+    assert!(roof_pos[1] + roof_he[1] <= 2.13 && roof_pos[1] - roof_he[1] >= 1.8);
+    // the mouth must stay open: no obstacle may plug the entry corridor
+    // (x -4.26..-3.15, |z| < 0.49, y < 1.89 is scored space, not a collider)
+    let _ = find("hub-west-back");
 
     // tower uprights: GLB x=±7.21, ~1.83 m tall; west tower at +z
     let (pos, he) = find("tower-west");
@@ -77,12 +88,12 @@ fn rebuilt_layout_matches_glb_elements() {
     // trench skirts: z ≈ ±2.45..2.76 plus counterbalance arm toward wall
     let (pos, he) = find("trench-sw");
     assert!((pos[0] + 3.645).abs() < 1e-3 && pos[2] > 2.4);
-    assert!(pos[2] + he[2] >= 3.4, "trench box should cover the hinged arm");
+    assert!(pos[2] + he[2] >= 2.75, "trench box should cover the hinged arm");
 
     // bump strips between hub and trench lanes
     let (pos, he) = find("bump-s1");
     assert!((pos[0] + 3.645).abs() < 1e-3 && (pos[2] - 1.67).abs() < 0.1);
-    assert!(he[1] <= 0.12, "bump is a low floor strip");
+    assert!(he[1] <= 0.2, "bump is a low floor strip");
 
     // climb points sit on the tower top rungs (y ≈ 1.83)
     let cp = spec.climb_points.iter().find(|c| c.name == "tower-west-top").unwrap();

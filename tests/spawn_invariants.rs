@@ -19,19 +19,21 @@ fn spec_2910() -> RobotSpec {
 }
 
 /// No two game pieces overlap at spawn — that was the "balls fly
-/// everywhere" bug. Radius 0.075 m => centers must be > ~0.15 m apart.
+/// everywhere" bug. MoSim's exact layout packs centers ~0.149 m apart
+/// (their collider radius is 0.07 m); ours is 0.075 so adjacent pieces
+/// may touch by ~1 mm at spawn — Rapier settles that immediately.
 #[test]
 fn pieces_spawn_non_overlapping() {
     let spec = spec_2910();
     let w = load_game_world(&[spec]);
     let p = w.piece_positions();
-    assert_eq!(p.len(), 504);
+    assert_eq!(p.len(), 503);
     for i in 0..p.len() {
         for j in i + 1..p.len() {
             let dx = p[i][0] - p[j][0];
             let dz = p[i][2] - p[j][2];
             let dist2 = dx * dx + dz * dz;
-            assert!(dist2 > 0.15 * 0.15,
+            assert!(dist2 > 0.14 * 0.14,
                 "pieces {i},{j} overlap at spawn (dist {:.3})", dist2.sqrt());
         }
     }
@@ -48,13 +50,13 @@ fn robots_spawn_grounded() {
         "robot bottom at y={:.3}, half={:.3} — floats", t[1] - half, half);
 }
 
-/// 504 fuel, all finite positions, after 1 s of sim.
+/// 503 fuel, all finite positions, after 1 s of sim.
 #[test]
 fn match_state_stable_after_1s() {
     let spec = spec_2910();
     let mut w = load_game_world(&[spec]);
     for _ in 0..400 { w.step(&[None]); }
-    assert_eq!(w.piece_positions().len(), 504);
+    assert_eq!(w.piece_positions().len(), 503);
     for (i, p) in w.piece_positions().iter().enumerate() {
         assert!(p[0].is_finite() && p[2].is_finite(),
             "piece {i} NaN after 1 s");

@@ -43,17 +43,21 @@ fn collider_matches_archetype_dims() {
     }
 }
 
-/// Staging zones cover all real staging areas — neutral zone + 2 depots +
-/// 2 outpost chutes — so no staging area is silently missing pieces.
+/// Staging covers all real staging areas — the exact MoSim layout uses
+/// `[[point]]` entries (midfield grid + alliance stashes), so the check
+/// counts staged points rather than zone records.
 #[test]
 fn all_staging_zones_have_pieces() {
     let table = PieceTable::load(Path::new("games/fuel.toml")).unwrap();
-    let total: u32 = table.zones.iter().map(|z| z.count).sum();
+    let total = table.piece_count();
     assert!(total >= 456, "staged {total}, expected >= 456 (504 - 48 preload)");
-    // each real staging area has fuel: neutral zone ~408, 4 stashes ~24 each
-    assert!(table.zones.iter().any(|z| z.count >= 400), "no neutral-zone pile");
-    let stashes: Vec<_> = table.zones.iter().filter(|z| z.count == 24).collect();
-    assert_eq!(stashes.len(), 4, "expected 4 depot/outpost stashes");
+    // midfield grid ~407 plus alliance stashes near each wall
+    let midfield = table.points.iter().filter(|p| p.pos[0].abs() < 1.5).count();
+    assert!(midfield >= 400, "no neutral-zone pile ({midfield})");
+    for side in [-1.0f32, 1.0] {
+        let stash = table.points.iter().filter(|p| p.pos[0] * side > 6.0).count();
+        assert!(stash >= 20, "alliance {side} stash too small ({stash})");
+    }
 }
 
 /// Pieces spawn inside the field bounds — not floating outside the walls.

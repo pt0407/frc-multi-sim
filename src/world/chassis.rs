@@ -12,8 +12,11 @@ pub const ROBOT_MASS: f32 = 60.0; // kg
 /// Default lineup size (issue #11): 3 per alliance, alliance = robot_id % 2.
 pub const NUM_ROBOTS: usize = 6;
 /// Distance of each alliance's station row from midfield (m).
-/// MoSim REBUILT scene: First/SecondSpawnPoint at x=±4.642.
-pub const ALLIANCE_X: f32 = 4.642;
+/// MoSim REBUILT scene: First/SecondSpawnPoint at x=±4.642. Nudged to
+/// 5.1 so the chassis front clears the bump ramps' rear toes (ramp
+/// colliders start at |x|=4.345): at 4.642 a max-size robot's front
+/// corners interpenetrate both ramp edges and wedge at spawn.
+pub const ALLIANCE_X: f32 = 5.1;
 /// Spacing between stations along z within an alliance row (m).
 /// MoSim spawn points sit at z=±1.517.
 pub const STATION_SPACING: f32 = 1.517;
@@ -72,16 +75,17 @@ impl RobotSpec {
     }
 }
 
-/// Station z offsets along an alliance row (m). Station 0 sits at
-/// midfield so robots 0/1 keep their historical spawns (x=∓4, z=0);
-/// stations 1 and 2 fill in on either side.
-pub const STATION_Z: [f32; 3] = [0.0, -STATION_SPACING, STATION_SPACING];
+/// Station z offsets along an alliance row (m). MoSim's two spawn
+/// points sit at z=±1.517; the third station uses midfield z=0 (the
+/// 1.28 m robot is wider than the 1.18 m bump corridor, so center
+/// robots must navigate around the ramps like on a real field).
+pub const STATION_Z: [f32; 3] = [-STATION_SPACING, STATION_SPACING, 0.0];
 
 /// Default spawn spec for one robot slot (issue #11): alliance rows.
 /// Alliance = `robot_id % 2` (even ids on -x, odd on +x); the station
 /// index `robot_id / 2` picks the slot's z position per `STATION_Z`,
-/// so ids 0..6 spawn at x=∓4 with z=0, -2, +2. Slots beyond 6 wrap
-/// through the stations.
+/// so ids 0..6 spawn at x=∓5.1 with z=-1.5, +1.5, 0. Slots beyond 6
+/// wrap through the stations.
 pub fn default_spec(robot_id: usize) -> RobotSpec {
     let alliance = robot_id % 2;
     let station = robot_id / 2;

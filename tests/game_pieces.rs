@@ -73,6 +73,9 @@ fn hub_table() -> PieceTable {
 #[test]
 fn intake_region_captures_piece() {
     let mut specs = chassis::default_specs();
+    // station spawns put robot 0 at z=-1.517; this test needs it on the
+    // piece's z=0 lane
+    specs[0].spawn = [-4.0, specs[0].spawn[1], 0.0];
     specs[0].intake = Some(intake_spec());
     let mut w = World::with_config(&specs, SEED, FieldSpec::default(), &intake_table());
     assert_eq!(w.pieces.len(), 1);
@@ -122,7 +125,9 @@ fn inactive_intake_does_not_capture() {
 
 #[test]
 fn ballistic_shot_into_hub_scores() {
-    let specs = chassis::default_specs();
+    let mut specs = chassis::default_specs();
+    // hub is at z=0; station spawn would put the shot 1.5 m wide of it
+    specs[0].spawn = [-4.0, specs[0].spawn[1], 0.0];
     let mut w = World::with_config(&specs, SEED, FieldSpec::default(), &hub_table());
     // give robot 0 a piece and fire a lob toward the hub at x=-2
     w.held[0] = 1;
@@ -235,6 +240,7 @@ fn replay_log_roundtrip_with_pieces() {
     use frc_sim_m0::PROTOCOL_VERSION;
 
     let mut specs = chassis::default_specs();
+    specs[0].spawn = [-4.0, specs[0].spawn[1], 0.0];
     specs[0].intake = Some(intake_spec());
     let t = PieceTable {
             points: vec![],
