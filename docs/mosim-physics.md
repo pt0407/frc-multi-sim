@@ -41,6 +41,12 @@ These are MoSim's hand-tuned values — useful realism targets, not FRC rules.
 
 ## CAD extraction
 
-payload.dat contained only managed DLLs (215 entries). Meshes/prefabs
-live in the app's Unity asset files elsewhere in the install — needs
-AssetStudio or equivalent; separate tooling project.
+`payload.dat` unpacks to the full Unity asset set (level0-4,
+sharedassets0-4, resources). Field visuals extract cleanly via UnityPy
+(`/tmp/mosim-unity/export_field.py` → `/tmp/mosim-field/mosim-field.glb`,
+real FIRST field CAD). Robot models are NOT in the scene assets — they
+ship as AES-256 encrypted AssetBundles under
+`StreamingAssets/ProtectedRobots/macOS/*.enc`, decrypted at runtime by
+`libipc_plugin.dylib` using a session key handed over IPC by MoSim's
+launcher (`MOSIM_IPC_PORT`). Mechanism *constants* survive in the
+decompiled robot scripts — see `docs/mosim-robots.md`.
