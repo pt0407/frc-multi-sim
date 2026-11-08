@@ -26,6 +26,14 @@ use rapier3d::prelude::*;
 pub const PHYSICS_HZ: f32 = 400.0;
 pub const AGENT_EVERY: u32 = 8; // 50 Hz agent tick
 
+/// A game piece kinematically carried by a robot (intake capture ->
+/// mechanism ride -> ballistic release).
+#[derive(Debug, Clone, Copy)]
+struct CarriedPiece {
+    handle: RigidBodyHandle,
+    robot: usize,
+}
+
 pub struct World {
     pipeline: PhysicsPipeline,
     gravity: Vector<f32>,
@@ -50,8 +58,15 @@ pub struct World {
     /// The field layout this world was built from (issue #14); viz reads
     /// it to emit the config message, and it feeds the replay config hash.
     pub field: FieldSpec,
-    /// live game-piece bodies (issue #3); scored/captured pieces are removed
+    /// live game-piece bodies (issue #3); scored pieces are removed,
+    /// captured pieces switch to kinematic carry (see `carried`)
     pub pieces: Vec<RigidBodyHandle>,
+    /// pieces physically captured by intake: kinematic bodies glued to a
+    /// carry anchor on their robot (MoSim GamePieceIntake model — the piece
+    /// visibly rides the mechanism instead of vanishing into a counter).
+    /// Released ballistically on `shoot`; preload inventory (held without
+    /// a body) still spawns fresh on shot.
+    carried: Vec<CarriedPiece>,
     /// per-robot held-piece inventory, fed by intake captures and consumed
     /// by shots
     pub held: Vec<u32>,
@@ -148,6 +163,7 @@ impl World {
             rng: SimRng::seeded(seed),
             field,
             pieces: Vec::new(),
+            carried: Vec::new(),
             held: vec![0; specs.len()],
             scores: [0; 2],
             hubs: table.hubs.clone(),
@@ -469,12 +485,38 @@ impl World {
                             shot.launch_velocity * shot.hood_angle.sin(),
                             hv * aim.sin() + lv.z,
                         ];
-                        self.pieces.push(pieces::spawn_piece(
-                            &mut self.bodies,
-                            &mut self.colliders,
-                            [pos.x, pos.y + shot.launch_height, pos.z],
-                            vel,
-                        ));
+                        let launch_pos = [pos.x, pos.y + shot.launch_height, pos.z];
+                        // release the physically-carried piece if there is
+                        // one; preload inventory (held with no body) still
+                        // spawns a fresh ballistic piece
+                        if let Some(ci) = self.carried.iter().position(|c| c.robot == i) {
+                            let c = self.carried.remove(ci);
+                            let body = &mut self.bodies[c.handle];
+                            body.set_body_type(RigidBodyType::Dynamic, true);
+                            let cols: Vec<ColliderHandle> =
+                                body.colliders().to_vec();
+                            for ch in cols {
+                                if let Some(col) = self.colliders.get_mut(ch) {
+                                    col.set_sensor(false);
+                                }
+                            }
+                            body.set_translation(
+                                vector![launch_pos[0], launch_pos[1], launch_pos[2]],
+                                true,
+                            );
+                            body.set_linvel(
+                                vector![vel[0], vel[1], vel[2]],
+                                true,
+                            );
+                            body.set_angvel(vector![0.0, 4.0, 0.0], true);
+                        } else {
+                            self.pieces.push(pieces::spawn_piece(
+                                &mut self.bodies,
+                                &mut self.colliders,
+                                launch_pos,
+                                vel,
+                            ));
+                        }
                         // flywheel ball-contact dip
                         if let Some(js) = self.joints.get_mut(i) {
                             for j in js.iter_mut() {
@@ -538,6 +580,26 @@ impl World {
                     }
                 }
             }
+        }
+        // carried pieces: kinematic-follow their robot's carry anchor
+        // (chassis-frame offset rotated by yaw, riding at hopper height).
+        // Set before pipeline.step so Rapier moves them with the robot.
+        for c in &self.carried {
+            let (rpos, ryaw) = {
+                let b = &self.bodies[self.chassis[c.robot]];
+                let r = b.rotation();
+                let t = b.translation();
+                ([t.x, t.y, t.z], yaw_from_quat([r.i, r.j, r.k, r.w]))
+            };
+            let (s, co) = ryaw.sin_cos();
+            // anchor: front of the chassis at hopper height
+            let anchor = [
+                rpos[0] + 0.30 * co,
+                rpos[1] + 0.45,
+                rpos[2] - 0.30 * s,
+            ];
+            let body = &mut self.bodies[c.handle];
+            body.set_next_kinematic_translation(vector![anchor[0], anchor[1], anchor[2]]);
         }
         // quadratic air drag on free pieces (FuelSim DRAG_FORCE_FACTOR)
         pieces::apply_drag(&mut self.bodies, &self.pieces);
@@ -645,9 +707,14 @@ impl World {
 
         let mut remove: Vec<usize> = Vec::new();
         for (pi, h) in self.pieces.iter().enumerate() {
+            // carried pieces are kinematically glued to their robot —
+            // skip intake re-capture and hub scoring for them
+            if self.carried.iter().any(|c| c.handle == *h) {
+                continue;
+            }
             let body = &self.bodies[*h];
-            let t = body.translation();
-            let v = body.linvel();
+            let t = *body.translation();
+            let v = *body.linvel();
             let pos = [t.x, t.y, t.z];
 
             // intake capture
@@ -665,7 +732,30 @@ impl World {
                         &pos,
                     ) {
                         self.held[i] += 1;
-                        remove.push(pi);
+                        // carry, don't despawn: kinematic body glued to the
+                        // robot's carry anchor until shot or match end.
+                        // Sensor collider — a ball riding inside the
+                        // mechanism must not shove the chassis or field.
+                        {
+                            let body = &mut self.bodies[*h];
+                            body.set_body_type(
+                                RigidBodyType::KinematicPositionBased,
+                                true,
+                            );
+                            body.set_linvel(vector![0.0, 0.0, 0.0], true);
+                            body.set_angvel(vector![0.0, 0.0, 0.0], true);
+                            let cols: Vec<ColliderHandle> =
+                                body.colliders().to_vec();
+                            for ch in cols {
+                                if let Some(c) = self.colliders.get_mut(ch) {
+                                    c.set_sensor(true);
+                                }
+                            }
+                        }
+                        self.carried.push(CarriedPiece {
+                            handle: *h,
+                            robot: i,
+                        });
                         captured = true;
                         break;
                     }

@@ -97,7 +97,9 @@ fn intake_region_captures_piece() {
         "piece was never collected (pieces left: {})",
         w.pieces.len()
     );
-    assert_eq!(w.pieces.len(), 0, "captured piece should be removed");
+    // carried, not despawned: the piece stays in the world as a kinematic
+    // body riding the robot's carry anchor (MoSim intake model)
+    assert_eq!(w.pieces.len(), 1, "carried piece should remain in the world");
     assert_eq!(w.sensor_frame(0, 0).pieces_held, 1);
 }
 
