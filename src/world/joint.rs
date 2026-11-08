@@ -78,6 +78,10 @@ impl JointSim {
         // resolved distance-keyed shot preset (flywheel frac + hood rad);
         // drives `shot_table` automation on shooter/hood drivers
         shot_preset: Option<ShotPreset>,
+        // SWM velocity-lead for turret aim (rad, robot frame): the
+        // barrel must aim `lead` off the commanded yaw so chassis motion
+        // doesn't drag the shot off target (MoSim GetShootOnMoveTarget)
+        turret_lead: f32,
     ) {
         let spec = &self.spec;
         let preset = shot_preset;
@@ -158,7 +162,7 @@ impl JointSim {
                     .or_else(|| {
                         cmd.shoot.map(|s| {
                             if spec.driver == JointDriver::Turret {
-                                s.turret_yaw
+                                s.turret_yaw + turret_lead
                             } else {
                                 s.hood_angle
                             }
@@ -363,18 +367,18 @@ mod tests {
         let c = cmd();
         // intake on: target vel = max_vel, but accel caps the ramp
         for _ in 0..10 {
-            j.step(0, &c, 1.0 / 400.0, true, false, false, &dt, [0.0, 0.0], None);
+            j.step(0, &c, 1.0 / 400.0, true, false, false, &dt, [0.0, 0.0], None, 0.0);
         }
         assert!(j.vel[0] > 0.0 && j.vel[0] < 10.0, "vel={}", j.vel[0]);
         assert!(j.pos[0] > 0.0);
         // after enough time it reaches target speed
         for _ in 0..400 {
-            j.step(0, &c, 1.0 / 400.0, true, false, false, &dt, [0.0, 0.0], None);
+            j.step(0, &c, 1.0 / 400.0, true, false, false, &dt, [0.0, 0.0], None, 0.0);
         }
         assert!((j.vel[0] - 10.0).abs() < 0.5, "vel={}", j.vel[0]);
         // intake off: spins down
         for _ in 0..400 {
-            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
+            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None, 0.0);
         }
         assert!(j.vel[0].abs() < 1.0, "vel={}", j.vel[0]);
     }
@@ -394,7 +398,7 @@ mod tests {
             launch_height: 0.5,
         });
         for _ in 0..400 {
-            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None);
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None, 0.0);
         }
         assert!(j.shooter_at_speed(), "vel={}", j.vel[0]);
     }
@@ -416,18 +420,18 @@ mod tests {
         });
         // early ticks: moving toward 1.0 rad but lagging (real slew)
         for _ in 0..20 {
-            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None);
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None, 0.0);
         }
         assert!(j.pos[0] > 0.0 && j.pos[0] < 0.5, "pos={}", j.pos[0]);
         // settles on target
         for _ in 0..2000 {
-            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None);
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None, 0.0);
         }
         assert!((j.pos[0] - 1.0).abs() < 0.05, "pos={}", j.pos[0]);
         // no shot command: holds last angle
         c.shoot = None;
         for _ in 0..400 {
-            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
+            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None, 0.0);
         }
         assert!((j.pos[0] - 1.0).abs() < 0.05, "pos={}", j.pos[0]);
     }
@@ -448,17 +452,17 @@ mod tests {
             launch_height: 0.5,
         });
         for _ in 0..20 {
-            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None);
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None, 0.0);
         }
         assert!(j.pos[0] > 0.0 && j.pos[0] < 0.4, "pos={}", j.pos[0]);
         for _ in 0..2000 {
-            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None);
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None, 0.0);
         }
         assert!((j.pos[0] - 0.8).abs() < 0.05, "pos={}", j.pos[0]);
         // hood holds its angle when no shot is requested
         c.shoot = None;
         for _ in 0..400 {
-            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
+            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None, 0.0);
         }
         assert!((j.pos[0] - 0.8).abs() < 0.05, "pos={}", j.pos[0]);
     }
@@ -489,7 +493,7 @@ mod tests {
         };
         dt.resolve(&c, &kin);
         for _ in 0..400 {
-            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
+            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None, 0.0);
         }
         for (i, p) in j.pos.iter().enumerate() {
             let err = (p - std::f32::consts::FRAC_PI_2)
@@ -529,7 +533,7 @@ mod tests {
         });
         let preset = shot_preset_at(&table, 4.0).unwrap();
         for _ in 0..200 {
-            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], Some(preset));
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], Some(preset), 0.0);
         }
         assert!(
             (j.vel[0] - 60.0).abs() < 2.0,
@@ -538,7 +542,7 @@ mod tests {
         );
         // without a preset it runs flat out
         for _ in 0..400 {
-            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None);
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None, 0.0);
         }
         assert!(j.vel[0] > 95.0, "vel={}", j.vel[0]);
     }
@@ -567,7 +571,7 @@ mod tests {
         });
         let preset = shot_preset_at(&table, 6.0).unwrap(); // hood = 0.6
         for _ in 0..200 {
-            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], Some(preset));
+            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], Some(preset), 0.0);
         }
         assert!(
             (j.pos[0] - 0.6).abs() < 0.05,
@@ -592,10 +596,10 @@ mod tests {
         hspec.max_vel = 2.0; // slow slew so the gate is observable
         hspec.accel = 4.0;
         let mut hood = JointSim::new(hspec, 4);
-        hood.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
+        hood.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None, 0.0);
         assert!(!hood.hood_at_target(), "hood still slewing");
         for _ in 0..400 {
-            hood.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
+            hood.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None, 0.0);
         }
         assert!(hood.hood_at_target(), "hood settled, pos={}", hood.pos[0]);
         // turret joint: same gate at the tighter 2° tolerance
@@ -604,14 +608,40 @@ mod tests {
         tspec.max_vel = 2.0;
         tspec.accel = 4.0;
         let mut turret = JointSim::new(tspec, 4);
-        turret.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
+        turret.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None, 0.0);
         assert!(!turret.turret_at_target(), "turret still slewing");
         for _ in 0..400 {
-            turret.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
+            turret.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None, 0.0);
         }
         assert!(turret.turret_at_target(), "turret settled, pos={}", turret.pos[0]);
         // non-positional drivers never gate
         let intake = JointSim::new(spin_spec(JointDriver::Intake), 4);
         assert!(intake.hood_at_target() && intake.turret_at_target());
+    }
+
+    #[test]
+    fn turret_lead_offsets_aim_target() {
+        let dt = Drivetrain::swerve(60.0, 0.4);
+        let mut spec = spin_spec(JointDriver::Turret);
+        spec.mode = JointMode::Position;
+        spec.max_vel = 20.0;
+        spec.accel = 100000.0;
+        let mut j = JointSim::new(spec, 4);
+        let mut c = cmd();
+        c.shoot = Some(crate::protocol::ShotCommand {
+            launch_velocity: 10.0,
+            hood_angle: 0.5,
+            turret_yaw: 0.4,
+            launch_height: 0.5,
+        });
+        // SWM lead of +0.3 rad: turret should settle at 0.4 + 0.3 = 0.7
+        for _ in 0..200 {
+            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None, 0.3);
+        }
+        assert!(
+            (j.pos[0] - 0.7).abs() < 0.05,
+            "turret should settle at yaw+lead=0.7, got {}",
+            j.pos[0]
+        );
     }
 }

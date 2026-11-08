@@ -497,6 +497,7 @@ impl World {
                             pos.x, pos.y, pos.z,
                         ]),
                     );
+                    let turret_lead = self.turret_lead(i, cmd, lv_robot);
                     // split borrows: joints mutate, drivetrain reads
                     let (js, dt_) = {
                         let js = self.joints.get_mut(i).unwrap();
@@ -514,6 +515,7 @@ impl World {
                             dt_,
                             lv_robot,
                             shot_preset,
+                            turret_lead,
                         );
                     }
                 }
@@ -1444,6 +1446,59 @@ impl World {
             (m.spec.pivot, mech::arm_angle(&self.bodies, m.arm) - cyaw)
         });
         Some(Self::roller_anchor(rp, js.spec.on_arm, cpos, cyaw, arm))
+    }
+
+    /// SWM velocity lead for turret aim (MoSim `GetShootOnMoveTarget`):
+    /// the barrel must point `lead` radians off the commanded turret yaw
+    /// so chassis motion doesn't drag the shot off target. The piece's
+    /// ground track is `barrel·Vh + lv`; requiring it to follow the
+    /// commanded aim `u` gives `barrel = u − lv/Vh`, so
+    /// `lead = ∠(u·Vh − lv) − ∠u`. Robot-frame [x,z]; 0 without a shot
+    /// or a turret joint.
+    fn turret_lead(
+        &self,
+        i: usize,
+        cmd: &ActuatorFrame,
+        lv_robot: [f32; 2],
+    ) -> f32 {
+        let shot = match cmd.shoot {
+            Some(s) => s,
+            None => return 0.0,
+        };
+        let js = match self.joints.get(i) {
+            Some(j) if j.iter().any(|j| j.spec.driver == crate::archetype::JointDriver::Turret) => j,
+            _ => return 0.0,
+        };
+        // launch speed: physics-derived from flywheel ω when the shooter
+        // joint sets launch_radius, else the commanded magnitude
+        let v = js
+            .iter()
+            .find(|j| j.spec.driver == crate::archetype::JointDriver::Shooter)
+            .map(|j| {
+                j.spec
+                    .launch_radius
+                    .map(|lr| j.vel[0] * lr * 1.8)
+                    .unwrap_or(shot.launch_velocity)
+            })
+            .unwrap_or(shot.launch_velocity);
+        // horizontal launch speed ≈ V·cos(hood angle)
+        let hood = js
+            .iter()
+            .find(|j| j.spec.driver == crate::archetype::JointDriver::Hood)
+            .map(|j| j.pos[0])
+            .unwrap_or(shot.hood_angle);
+        let vh = (v * hood.cos()).max(0.1);
+        let (s, c) = shot.turret_yaw.sin_cos();
+        let bx = c - lv_robot[0] / vh;
+        let bz = s - lv_robot[1] / vh;
+        let mut lead = bz.atan2(bx) - shot.turret_yaw;
+        while lead > std::f32::consts::PI {
+            lead -= std::f32::consts::TAU;
+        }
+        while lead <= -std::f32::consts::PI {
+            lead += std::f32::consts::TAU;
+        }
+        lead
     }
 
     /// 3D distance to the robot's *own-alliance* hub entry point — the
