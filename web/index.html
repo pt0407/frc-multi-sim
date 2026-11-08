@@ -86,6 +86,8 @@
     <button data-p="teleop">teleop</button>
     <button data-p="endgame">endgame</button>
     <button data-p="complete">end</button>
+    <div class="label">archetype editor</div>
+    <button id="c-editor">⚙ edit spec</button>
     <div class="label">camera</div>
     <div id="camkeys">1 overview &nbsp;2 robot &nbsp;3 red &nbsp;4 blue</div>
   </div>
@@ -97,6 +99,17 @@
       <button id="d-connect" style="background:#2563eb;color:#fff;border:none;border-radius:6px;padding:6px 12px;font:700 12px monospace;cursor:pointer">connect</button>
     </div>
     <div id="d-status" style="font-size:10px;color:#6b7280">W/S drive · A/D turn · I intake · J shoot · K shooter · U/O arm</div>
+  </div>
+
+  <div id="ed-panel" style="display:none;position:fixed;left:12px;top:56px;width:520px;max-height:70vh;background:rgba(10,14,20,.95);border:1px solid #1f2937;border-radius:10px;padding:12px;z-index:35;flex-direction:column;gap:8px">
+    <div style="display:flex;gap:8px;align-items:center">
+      <select id="ed-name" style="background:#1f2937;color:#dfe6ee;border:1px solid #374151;border-radius:6px;padding:6px;font:600 12px monospace"></select>
+      <button id="ed-load" style="background:#374151;color:#dfe6ee;border:1px solid #4b5563;border-radius:6px;padding:6px 10px;font:600 12px monospace;cursor:pointer">load</button>
+      <button id="ed-save" style="background:#059669;color:#fff;border:none;border-radius:6px;padding:6px 14px;font:700 12px monospace;cursor:pointer">save + reload</button>
+      <span id="ed-msg" style="font-size:10px;color:#6b7280"></span>
+    </div>
+    <textarea id="ed-toml" spellcheck="false" style="flex:1;min-height:300px;background:#0b0d11;color:#9fe870;border:1px solid #374151;border-radius:6px;padding:8px;font:11px/1.4 monospace;resize:vertical"></textarea>
+    <div style="font-size:10px;color:#4b5563">edits write archetypes/&lt;name&gt;.toml; saving a bot in the lineup rebuilds the world live</div>
   </div>
 
   <div id="telem"><b>telemetry</b><br>…</div>
@@ -116,12 +129,25 @@
       const s = JSON.parse(e.data);
       if (s.archetypes) {
         archSel.innerHTML = "";
+        const edSel = document.getElementById("ed-name");
+        edSel.innerHTML = "";
         for (const a of s.archetypes) {
           const o = document.createElement("option");
           o.value = a; o.textContent = a;
           archSel.appendChild(o);
+          const e = document.createElement("option");
+          e.value = a; e.textContent = a;
+          edSel.appendChild(e);
         }
-        if (s.archetypes.includes("2910")) archSel.value = "2910";
+        if (s.archetypes.includes("2910")) { archSel.value = "2910"; edSel.value = "2910"; }
+        return;
+      }
+      // archetype editor replies carry toml/saved/error, not status fields
+      if (s.toml !== undefined || s.saved !== undefined || s.error !== undefined) {
+        const msg = document.getElementById("ed-msg");
+        if (s.error !== undefined) msg.textContent = "error: " + s.error;
+        else if (s.toml !== undefined) document.getElementById("ed-toml").value = s.toml;
+        else msg.textContent = `saved ${s.saved}` + (s.reloaded ? " — world reloaded" : " — not in lineup");
         return;
       }
       const pill = $("phase-pill");
@@ -179,6 +205,17 @@
     };
     for (const b of document.querySelectorAll("#ctrl button[data-p]"))
       b.onclick = () => cws.send(JSON.stringify({op:"set_phase", phase:b.dataset.p}));
+
+    // archetype spec editor: get/put TOML over the control channel;
+    // put_archetype validates + live-reloads when the bot is in the lineup
+    const edPanel = document.getElementById("ed-panel");
+    document.getElementById("c-editor").onclick = () => {
+      edPanel.style.display = edPanel.style.display === "none" ? "flex" : "none";
+    };
+    document.getElementById("ed-load").onclick = () =>
+      cws.send(JSON.stringify({op:"get_archetype", name:document.getElementById("ed-name").value}));
+    document.getElementById("ed-save").onclick = () =>
+      cws.send(JSON.stringify({op:"put_archetype", name:document.getElementById("ed-name").value, toml:document.getElementById("ed-toml").value}));
 
     // ---- human driver: claims a robot slot on the agent WS (9770) ----
     // WASD arcade drive in the robot's heading frame, I=intake, J=shoot,

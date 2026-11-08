@@ -25,6 +25,10 @@ pub struct MatchCtl {
     pub specs: std::sync::Arc<std::sync::Mutex<Vec<RobotSpec>>>,
     /// startup lineup — `set_lineup` with an empty list restores it
     pub defaults: Vec<RobotSpec>,
+    /// lineup names from the last `set_lineup` (empty = startup lineup,
+    /// whose names aren't tracked) — `put_archetype` rebuilds only when
+    /// the edited bot appears here
+    pub lineup_names: std::sync::Mutex<Vec<String>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,6 +55,11 @@ pub enum ControlMsg {
     /// List loadable archetype names (archetypes/*.toml stems) for the
     /// home-screen picker.
     ListArchetypes,
+    /// Fetch an archetype's raw TOML for the spec editor.
+    GetArchetype { name: String },
+    /// Write an archetype TOML (validated by parse) and, when the edited
+    /// bot is in the current lineup, rebuild the world with it.
+    PutArchetype { name: String, toml: String },
 }
 
 /// Resolve lineup names to spawn specs, using the same alliance/station
@@ -64,6 +73,21 @@ fn specs_for(names: &[String]) -> anyhow::Result<Vec<RobotSpec>> {
         specs.push(RobotSpec::from_archetype(&a, [base.spawn[0], base.spawn[2]]));
     }
     Ok(specs)
+}
+
+/// Sanitize an archetype name to a bare file stem (no path traversal).
+fn archetype_stem(name: &str) -> Option<String> {
+    let stem = std::path::Path::new(name)
+        .file_stem()?
+        .to_string_lossy()
+        .into_owned();
+    (!stem.is_empty() && stem != "." && stem != "..").then_some(stem)
+}
+
+fn archetype_path(name: &str) -> anyhow::Result<std::path::PathBuf> {
+    let stem = archetype_stem(name)
+        .ok_or_else(|| anyhow::anyhow!("invalid archetype name {name:?}"))?;
+    Ok(std::path::PathBuf::from("archetypes").join(format!("{stem}.toml")))
 }
 
 /// Top-level archetype TOML stems, sorted — what the home screen offers.
@@ -181,9 +205,87 @@ async fn handle_conn(
                     }
                 };
                 *ctl.specs.lock().unwrap() = new_specs;
+                *ctl.lineup_names.lock().unwrap() = archetypes;
                 let mut w = world.lock().unwrap();
                 *w = (ctl.make_world.lock().unwrap())();
                 serde_json::to_string(&status(&w)).unwrap()
+            }
+            Ok(ControlMsg::GetArchetype { name }) => {
+                match archetype_path(&name).and_then(|p| {
+                    std::fs::read_to_string(&p)
+                        .map(|toml| (p.clone(), toml))
+                        .map_err(|e| anyhow::anyhow!("{}: {e}", p.display()))
+                }) {
+                    Ok((p, toml)) => serde_json::to_string(&serde_json::json!({
+                        "name": p.file_stem().unwrap().to_string_lossy(),
+                        "toml": toml,
+                    }))
+                    .unwrap(),
+                    Err(e) => format!(
+                        "{{\"error\":{}}}",
+                        serde_json::to_string(&e.to_string()).unwrap()
+                    ),
+                }
+            }
+            Ok(ControlMsg::PutArchetype { name, toml }) => {
+                let reply = match archetype_path(&name)
+                    .and_then(|p| {
+                        toml.parse::<toml::Value>()
+                            .map_err(|e| anyhow::anyhow!("invalid TOML: {e}"))?;
+                        std::fs::write(&p, &toml)
+                            .map_err(|e| anyhow::anyhow!("{}: {e}", p.display()))?;
+                        // full parse check via a temp-load of the new text
+                        let dir = std::env::temp_dir().join("frc-archetype-check.toml");
+                        std::fs::write(&dir, &toml)?;
+                        Archetype::load(&dir)
+                            .map_err(|e| anyhow::anyhow!("archetype rejected: {e:#}"))?;
+                        Ok(p)
+                    })
+                {
+                    Ok(p) => {
+                        // live-reload: if the edited bot is in the current
+                        // lineup, rebuild specs + world from disk
+                        let in_lineup = ctl
+                            .lineup_names
+                            .lock()
+                            .unwrap()
+                            .iter()
+                            .any(|n| archetype_stem(n).as_deref() == archetype_stem(&name).as_deref());
+                        if in_lineup {
+                            let names = ctl.lineup_names.lock().unwrap().clone();
+                            match specs_for(&names) {
+                                Ok(new_specs) => {
+                                    *ctl.specs.lock().unwrap() = new_specs;
+                                    let mut w = world.lock().unwrap();
+                                    *w = (ctl.make_world.lock().unwrap())();
+                                }
+                                Err(e) => {
+                                    let reply = format!(
+                                        "{{\"error\":{}}}",
+                                        serde_json::to_string(&format!(
+                                            "saved but lineup rebuild failed: {e:#}"
+                                        ))
+                                        .unwrap()
+                                    );
+                                    if sink.send(Message::Text(reply.into())).await.is_err() {
+                                        break;
+                                    }
+                                    continue;
+                                }
+                            }
+                        }
+                        serde_json::to_string(&serde_json::json!({
+                            "saved": p.display().to_string(),
+                            "reloaded": in_lineup,
+                        }))
+                        .unwrap()
+                    }
+                    Err(e) => format!(
+                        "{{\"error\":{}}}",
+                        serde_json::to_string(&e.to_string()).unwrap()
+                    ),
+                };
+                reply
             }
             Err(e) => format!("{{\"error\":{}}}", serde_json::to_string(&e.to_string()).unwrap()),
         };

@@ -260,6 +260,7 @@ async fn main() -> Result<()> {
         })),
         specs: specs_shared.clone(),
         defaults: specs.clone(),
+        lineup_names: std::sync::Mutex::new(Vec::new()),
     });
 
     // optional event log: header first, then per-tick records in the loop
