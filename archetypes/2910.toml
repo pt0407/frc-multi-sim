@@ -84,6 +84,10 @@ accel = 30.0
 roller_pos = [0.27, -0.03, 0.0]
 on_arm = true
 roller_radius = 0.30
+# roller axle is lateral (arm-local z); negative sign makes the intake
+# driver's positive spin drag fuel inward via surface velocity ω × r
+# (MoSim InteractionRoller) — reverse spin would eject pieces
+roller_axis = [0.0, 0.0, -1.0]
 
 # shooter: blades, drum, compliant wheels, hood/feed rollers — one joint,
 # every matched subtree shares the flywheel angle. Spins up on shoot

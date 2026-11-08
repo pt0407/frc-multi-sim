@@ -523,3 +523,69 @@ alliance = 1
     assert_eq!(t.hubs.len(), 1);
     assert!(FUEL_RADIUS > 0.07 && FUEL_RADIUS < 0.08);
 }
+
+/// MoSim InteractionRoller surface velocity: with `roller_axis` authored,
+/// the push direction is ω × r — flipping the axis reverses it, so a
+/// roller can drag fuel in OR eject it (unlike the legacy intake pull).
+#[test]
+fn roller_axis_surface_velocity_sets_push_direction() {
+    use frc_sim_m0::archetype::{JointDriver, JointMode, JointSpec};
+    use frc_sim_m0::world::pieces::PointSpawn;
+
+    let roller = |axis: [f32; 3]| JointSpec {
+        name: "roller".into(),
+        mv: "roller".into(),
+        scope: None,
+        mode: JointMode::Spin,
+        driver: JointDriver::Intake,
+        axis: None,
+        pivot: None,
+        max_vel: 10.0,
+        accel: 60.0,
+        limits: None,
+        wheel_radius: 0.0,
+        roller_pos: Some([0.5, 0.0, 0.0]),
+        roller_radius: Some(0.35),
+        roller_axis: Some(axis),
+        launch_radius: None,
+        muzzle_pos: None,
+        feed_time: None,
+        on_arm: false,
+    };
+    // intake region parked far ahead so rollers spin without capturing
+    let far_intake = IntakeSpec {
+        x_min: 5.0,
+        x_max: 6.0,
+        z_min: -0.4,
+        z_max: 0.4,
+        y_min: -0.45,
+        y_max: 0.0,
+                        capacity: None,
+    };
+    // piece sits just below the roller anchor (0.5, ~0.4, 0) chassis-frame
+    let table = PieceTable {
+        points: vec![PointSpawn {
+            pos: [0.7, 0.08, 0.0],
+        }],
+        ..Default::default()
+    };
+    let run = |axis: [f32; 3]| -> f32 {
+        let mut specs = chassis::default_specs();
+        specs[0].spawn = [0.0, specs[0].spawn[1], 0.0];
+        specs[0].intake = Some(far_intake);
+        specs[0].joints = vec![roller(axis)];
+        let mut w = World::with_config(&specs, SEED, FieldSpec::default(), &table);
+        let mut intake_on = cmd();
+        intake_on.intake_active = true;
+        for _ in 0..300 {
+            w.step(&[Some(intake_on.clone()), None]);
+        }
+        w.piece_positions()[0][0]
+    };
+    // axis +z, ω>0: surface velocity at a piece below the roller points +x
+    let pos_x = run([0.0, 0.0, 1.0]);
+    assert!(pos_x > 1.5, "+z axis should push piece +x, got x={pos_x}");
+    // axis -z reverses the surface velocity: piece is driven back -x
+    let neg_x = run([0.0, 0.0, -1.0]);
+    assert!(neg_x < 0.6, "-z axis should push piece -x, got x={neg_x}");
+}

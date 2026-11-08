@@ -329,6 +329,13 @@ pub struct JointSpec {
     /// roller interaction radius, m (default 0.3)
     #[serde(default)]
     pub roller_radius: Option<f32>,
+    /// roller spin axis in the same frame as `roller_pos` (chassis or
+    /// arm-local). When set, pieces in the zone are pushed along the
+    /// roller's surface velocity — ω × r — so spin direction controls
+    /// whether fuel is dragged in or ejected (MoSim InteractionRoller).
+    /// Unset = legacy pull-toward-intake-center behaviour.
+    #[serde(default)]
+    pub roller_axis: Option<[f32; 3]>,
     /// shooter exit radius, m: when set on a `driver = "shooter"` joint,
     /// launch speed is physics-derived as vel·radius·1.8 (compression-
     /// wheel exit factor, MoSim FlywheelBehaviour) instead of trusting

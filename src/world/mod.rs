@@ -740,12 +740,14 @@ impl World {
             body.set_linvel(vector![vel[0], vel[1], vel[2]], true);
             body.set_angvel(vector![0.0, 4.0, 0.0], true);
         }
-        // mechanism rollers: spinning joint surfaces drag free pieces
-        // toward the intake (MoSim InteractionRoller — rollers reach
-        // beyond the capture AABB and actively gather fuel)
-        self.apply_roller_forces();
-        // quadratic air drag on free pieces (FuelSim DRAG_FORCE_FACTOR)
+        // quadratic air drag on free pieces (FuelSim DRAG_FORCE_FACTOR).
+        // Runs BEFORE roller forces: apply_drag resets accumulated forces,
+        // so anything added earlier in the tick would be wiped.
         pieces::apply_drag(&mut self.bodies, &self.pieces);
+        // mechanism rollers: spinning joint surfaces push free pieces
+        // along their surface velocity (MoSim InteractionRoller — rollers
+        // reach beyond the capture AABB and actively gather or eject fuel)
+        self.apply_roller_forces();
         self.pipeline.step(
             &self.gravity,
             &self.integration,
@@ -1090,12 +1092,16 @@ impl World {
     }
 
     /// Roller contact model: for every spinning joint with a `roller_pos`
-    /// zone, free pieces inside the radius are dragged toward the robot's
-    /// intake center, scaled by how fast the rollers turn. Runs before
+    /// zone, free pieces inside the radius interact with the rollers.
+    /// With `roller_axis` set, pieces are pushed along the roller's surface
+    /// velocity ω × r — spin direction decides whether fuel is dragged in
+    /// or ejected (MoSim InteractionRoller). Without it, pieces are pulled
+    /// toward the intake center, scaled by spin fraction. Runs before
     /// `pipeline.step`; deterministic (no RNG).
     fn apply_roller_forces(&mut self) {
-        // build zones: (anchor world pos, pull-target world pos, radius, spin)
-        let mut zones: Vec<([f32; 3], [f32; 3], f32, f32)> = Vec::new();
+        // zones: (anchor, pull-target, radius, strength, axis, signed vel)
+        let mut zones: Vec<([f32; 3], [f32; 3], f32, f32, Option<[f32; 3]>, f32)> =
+            Vec::new();
         for i in 0..self.chassis.len() {
             let Some(intake) = self.intakes[i] else { continue };
             let (cpos, cyaw) = {
@@ -1120,15 +1126,20 @@ impl World {
             for js in self.joints.get(i).into_iter().flatten() {
                 let Some(rp) = js.spec.roller_pos else { continue };
                 // rollers must actually be turning to grab anything
-                let spin = js.vel[0].abs();
-                if spin < 2.0 {
+                let svel = js.vel[0];
+                if svel.abs() < 2.0 {
                     continue;
                 }
                 let anchor = Self::roller_anchor(rp, js.spec.on_arm, cpos, cyaw, arm);
                 let radius = js.spec.roller_radius.unwrap_or(0.3);
                 // strength scales with spin fraction of max_vel
-                let strength = (spin / js.spec.max_vel.max(1.0)).clamp(0.0, 1.0);
-                zones.push((anchor, target, radius, strength));
+                let strength =
+                    (svel.abs() / js.spec.max_vel.max(1.0)).clamp(0.0, 1.0);
+                let axis = js
+                    .spec
+                    .roller_axis
+                    .map(|a| Self::roller_axis_world(a, js.spec.on_arm, cyaw, arm));
+                zones.push((anchor, target, radius, strength, axis, svel));
             }
         }
         if zones.is_empty() {
@@ -1142,40 +1153,58 @@ impl World {
             {
                 continue;
             }
-            let (pos, in_zone) = {
+            let (pos, zone) = {
                 let body = &self.bodies[h];
                 let t = body.translation();
                 let p = [t.x, t.y, t.z];
-                // nearest zone wins (anchor, target, strength)
-                let mut best: Option<([f32; 3], f32)> = None;
+                // nearest zone wins
+                let mut best: Option<usize> = None;
                 let mut best_d = f32::INFINITY;
-                for (a, tgt, r, st) in &zones {
+                for (zi, (a, _, r, _, _, _)) in zones.iter().enumerate() {
                     let dx = p[0] - a[0];
                     let dz = p[2] - a[2];
                     let dy = p[1] - a[1];
                     let d2 = dx * dx + dz * dz;
                     if d2 < r * r && dy.abs() < r * 1.5 && d2 < best_d {
                         best_d = d2;
-                        best = Some((*tgt, *st));
+                        best = Some(zi);
                     }
                 }
                 (p, best)
             };
-            let Some((tgt, strength)) = in_zone else { continue };
-            // pull horizontally toward the intake center; ~20 m/s² peak —
-            // rollers drag fuel in without launching it
-            let dx = tgt[0] - pos[0];
-            let dz = tgt[2] - pos[2];
-            let d = (dx * dx + dz * dz).sqrt();
-            if d < 1e-4 {
-                continue;
-            }
+            let Some(zi) = zone else { continue };
+            let (anchor, tgt, _, strength, axis, svel) = zones[zi];
+            // push direction: roller surface velocity ω × r when an axis
+            // is authored, else pull toward the intake center
+            let (dx, dz) = match axis {
+                Some(ax) => {
+                    let rx = pos[0] - anchor[0];
+                    let ry = pos[1] - anchor[1];
+                    let rz = pos[2] - anchor[2];
+                    // tangential surface velocity = ω_vec × r, ω_vec =
+                    // svel·axis; only the horizontal part pushes fuel
+                    let vx = svel * (ax[1] * rz - ax[2] * ry);
+                    let vz = svel * (ax[0] * ry - ax[1] * rx);
+                    let l = (vx * vx + vz * vz).sqrt();
+                    if l < 1e-4 {
+                        continue;
+                    }
+                    (vx / l, vz / l)
+                }
+                None => {
+                    let dx = tgt[0] - pos[0];
+                    let dz = tgt[2] - pos[2];
+                    let d = (dx * dx + dz * dz).sqrt();
+                    if d < 1e-4 {
+                        continue;
+                    }
+                    (dx / d, dz / d)
+                }
+            };
+            // ~20 m/s² peak — rollers move fuel without launching it
             let f = 4.0 * strength; // N — ~20 m/s² on a 0.2 kg piece
             let body = &mut self.bodies[h];
-            body.add_force(
-                vector![f * dx / d, 0.0, f * dz / d],
-                true,
-            );
+            body.add_force(vector![f * dx, 0.0, f * dz], true);
         }
     }
 
@@ -1400,6 +1429,35 @@ impl World {
             cpos[1] + ay,
             cpos[2] - ax * s + az * c,
         ]
+    }
+
+    /// Resolve a `roller_axis` direction to world coords using the same
+    /// frame chain as `roller_anchor` (arm-local pitch, then chassis yaw).
+    /// Directions don't translate, so only rotations apply.
+    fn roller_axis_world(
+        axis: [f32; 3],
+        on_arm: bool,
+        cyaw: f32,
+        arm: Option<([f32; 3], f32)>,
+    ) -> [f32; 3] {
+        let local = if on_arm {
+            match arm {
+                Some((_, th)) => {
+                    let (st, ct) = th.sin_cos();
+                    [
+                        axis[0] * ct - axis[1] * st,
+                        axis[0] * st + axis[1] * ct,
+                        axis[2],
+                    ]
+                }
+                None => axis,
+            }
+        } else {
+            axis
+        };
+        let (x, y, z) = (local[0], local[1], local[2]);
+        let (s, c) = cyaw.sin_cos();
+        [x * c + z * s, y, -x * s + z * c]
     }
 
     /// Ground-truth extraction + orchestrator-side sensor filtering (issue

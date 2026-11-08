@@ -268,6 +268,7 @@ mod tests {
             wheel_radius: 0.0,
             roller_pos: None,
             roller_radius: None,
+            roller_axis: None,
             launch_radius: None,
             muzzle_pos: None,
             feed_time: None,
