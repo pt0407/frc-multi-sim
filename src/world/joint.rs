@@ -246,6 +246,7 @@ mod tests {
             wheel_radius: 0.0,
             roller_pos: None,
             roller_radius: None,
+            on_arm: false,
             launch_radius: None,
         }
     }

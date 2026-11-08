@@ -77,9 +77,12 @@ driver = "intake"
 mv = 'Roller Deadaxle|2" Roller Assembly'
 max_vel = 18.0
 accel = 30.0
-# roller contact zone (chassis frame): deployed-arm scoop position —
-# spinning rollers drag free pieces toward the intake AABB
-roller_pos = [0.55, 0.15, 0.0]
+# roller contact zone, ARM-LOCAL (on_arm): origin at the mech pivot
+# [0.33,0.30,0], +x along the arm — equals chassis [0.55,0.15,0] at the
+# deployed angle (-0.5 rad) and swings up with the arm when stowed.
+# Spinning rollers drag free pieces toward the intake AABB.
+roller_pos = [0.27, -0.03, 0.0]
+on_arm = true
 roller_radius = 0.30
 
 # shooter: blades, drum, compliant wheels, hood/feed rollers — one joint,

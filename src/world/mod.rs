@@ -865,6 +865,10 @@ impl World {
                 cpos[1],
                 cpos[2] - icx * s + icz * c,
             ];
+            // arm-carried roller zones: (pivot, arm angle rel. chassis yaw)
+            let arm = self.mechs.get(i).and_then(|ms| ms.first()).map(|m| {
+                (m.spec.pivot, mech::arm_angle(&self.bodies, m.arm) - cyaw)
+            });
             for js in self.joints.get(i).into_iter().flatten() {
                 let Some(rp) = js.spec.roller_pos else { continue };
                 // rollers must actually be turning to grab anything
@@ -872,11 +876,7 @@ impl World {
                 if spin < 2.0 {
                     continue;
                 }
-                let anchor = [
-                    cpos[0] + rp[0] * c + rp[2] * s,
-                    cpos[1] + rp[1],
-                    cpos[2] - rp[0] * s + rp[2] * c,
-                ];
+                let anchor = Self::roller_anchor(rp, js.spec.on_arm, cpos, cyaw, arm);
                 let radius = js.spec.roller_radius.unwrap_or(0.3);
                 // strength scales with spin fraction of max_vel
                 let strength = (spin / js.spec.max_vel.max(1.0)).clamp(0.0, 1.0);
@@ -1008,6 +1008,59 @@ impl World {
             let t = self.bodies[m.arm].translation();
             [t.x, t.y, t.z]
         })
+    }
+
+    /// World position of one joint's roller contact anchor. `on_arm`
+    /// joints resolve `roller_pos` in the mech arm's local frame (origin
+    /// at the pivot, rotating with the arm angle); others treat it as a
+    /// chassis-frame offset. `None` when the joint has no roller zone.
+    pub fn joint_roller_anchor(&self, robot: usize, joint: usize) -> Option<[f32; 3]> {
+        let js = self.joints.get(robot)?.get(joint)?;
+        let rp = js.spec.roller_pos?;
+        let b = &self.bodies[self.chassis[robot]];
+        let t = b.translation();
+        let r = b.rotation();
+        let cpos = [t.x, t.y, t.z];
+        let cyaw = yaw_from_quat([r.i, r.j, r.k, r.w]);
+        let arm = self.mechs.get(robot).and_then(|ms| ms.first()).map(|m| {
+            (m.spec.pivot, mech::arm_angle(&self.bodies, m.arm) - cyaw)
+        });
+        Some(Self::roller_anchor(rp, js.spec.on_arm, cpos, cyaw, arm))
+    }
+
+    /// Resolve a roller anchor to world coords. `arm` is the robot's
+    /// (pivot, arm angle relative to chassis yaw) when it has a mech.
+    fn roller_anchor(
+        rp: [f32; 3],
+        on_arm: bool,
+        cpos: [f32; 3],
+        cyaw: f32,
+        arm: Option<([f32; 3], f32)>,
+    ) -> [f32; 3] {
+        let (s, c) = cyaw.sin_cos();
+        // chassis-frame anchor: `on_arm` joints ride the mech arm —
+        // roller_pos is arm-local (origin at pivot, +x along the arm)
+        // and rotates with the arm angle about the pivot's lateral axis
+        let (ax, ay, az) = if on_arm {
+            match arm {
+                Some(([px, py, pz], th)) => {
+                    let (st, ct) = th.sin_cos();
+                    (
+                        px + rp[0] * ct - rp[1] * st,
+                        py + rp[0] * st + rp[1] * ct,
+                        pz + rp[2],
+                    )
+                }
+                None => (rp[0], rp[1], rp[2]),
+            }
+        } else {
+            (rp[0], rp[1], rp[2])
+        };
+        [
+            cpos[0] + ax * c + az * s,
+            cpos[1] + ay,
+            cpos[2] - ax * s + az * c,
+        ]
     }
 
     /// Ground-truth extraction + orchestrator-side sensor filtering (issue

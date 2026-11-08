@@ -5,7 +5,7 @@
 //!   - the swinging arm physically contacts a resting piece and moves it
 //!   - robots without `[mech]` keep the single-body path (mech_angle None)
 //!   - perf smoke: 6 mech'd robots at 400 Hz (prints µs/step, nocapture)
-use frc_sim_m0::archetype::MechSpec;
+use frc_sim_m0::archetype::{JointDriver, JointMode, JointSpec, MechSpec};
 use frc_sim_m0::world::chassis;
 use frc_sim_m0::world::field::FieldSpec;
 use frc_sim_m0::world::pieces::{PieceTable, SpawnZone};
@@ -14,15 +14,17 @@ use frc_sim_m0::{ActuatorFrame, MechCommand};
 
 const SEED: u64 = 0x57;
 
-/// Intake arm hung off the front-top bumper corner (see MechSpec docs).
+/// Floor-reaching intake arm off the front bumper: pivot low enough and
+/// the bar long enough that the deployed tip sweeps the ground where
+/// fuel rests (the old spec bottomed out ~0.2 m above the pieces).
 fn arm_spec() -> MechSpec {
     MechSpec {
         joint_type: frc_sim_m0::archetype::JointType::Revolute,
-        pivot: [0.40, 0.35, 0.0],
-        half_extents: [0.35, 0.03, 0.35],
+        pivot: [0.40, 0.15, 0.0],
+        half_extents: [0.50, 0.03, 0.35],
         mass: 4.0,
         stow_angle: 1.3,
-        limits: [-0.6, 1.4],
+        limits: [-0.7, 1.4],
         motor_stiffness: 300.0,
         motor_damping: 30.0,
         motor_max_force: 400.0,
@@ -36,22 +38,22 @@ fn deploy_cmd() -> ActuatorFrame {
         modules: None,
         intake_active: false,
         shoot: None,
-        mech: Some(MechCommand { joint: 0, target: -0.6 }),
+        mech: Some(MechCommand { joint: 0, target: -0.5 }),
         joints: None,
         shooter_on: false,
     }
 }
 
-/// Robot 0 (x=-4.8, z=0) gets an arm; pieces rest in its sweep path,
-/// ~0.9-1.1 m ahead of chassis center.
+/// Robot 0 (station 0: x=-5.1, z=-1.517) gets an arm; pieces rest in its
+/// floor sweep path on the same z lane, under the deployed arm tip.
 fn rig() -> (World, usize) {
     let mut specs = chassis::default_specs();
     specs[0].mechs = vec![arm_spec()];
     let table = PieceTable {
             points: vec![],
         zones: vec![SpawnZone {
-            center: [-3.75, 0.0],
-            half_extents: [0.12, 0.10],
+            center: [-3.9, -1.517],
+            half_extents: [0.15, 0.10],
             count: 4,
         }],
         hubs: vec![],
@@ -126,6 +128,69 @@ fn arm_holds_last_target_without_command() {
         (held - deployed).abs() < 0.15,
         "arm should hold target without fresh commands"
     );
+}
+
+/// Arm-mounted roller joint: `roller_pos` is arm-local (origin at the
+/// mech pivot, +x along the arm) and must rotate with the arm angle.
+fn arm_roller_joint() -> JointSpec {
+    JointSpec {
+        name: "arm-roller".into(),
+        mv: "roller".into(),
+        scope: None,
+        mode: JointMode::Spin,
+        driver: JointDriver::Intake,
+        axis: None,
+        pivot: None,
+        max_vel: 10.0,
+        accel: 20.0,
+        limits: None,
+        wheel_radius: 0.0,
+        roller_pos: Some([0.3, 0.0, 0.0]),
+        roller_radius: Some(0.3),
+        launch_radius: None,
+        on_arm: true,
+    }
+}
+
+#[test]
+fn on_arm_roller_anchor_follows_arm_angle() {
+    let mut specs = chassis::default_specs();
+    specs[0].mechs = vec![arm_spec()];
+    specs[0].joints = vec![arm_roller_joint()];
+    let table = PieceTable::default();
+    let mut w = World::with_config(&specs, SEED, FieldSpec::default(), &table);
+
+    let stowed = w.joint_roller_anchor(0, 0).expect("roller anchor");
+    let mut cmds: Vec<Option<ActuatorFrame>> = vec![None; w.num_robots()];
+    cmds[0] = Some(deploy_cmd());
+    for _ in 0..800 {
+        w.step(&cmds);
+    }
+    let deployed = w.joint_roller_anchor(0, 0).expect("roller anchor");
+
+    // the anchor must have swung with the arm (stow ~1.3 rad -> deploy ~-0.6)
+    let disp = ((deployed[0] - stowed[0]).powi(2)
+        + (deployed[1] - stowed[1]).powi(2)
+        + (deployed[2] - stowed[2]).powi(2))
+    .sqrt();
+    assert!(disp > 0.3, "arm-mounted anchor should move, disp={disp}");
+
+    // and it must equal pivot + Rz(arm_angle) * roller_pos in chassis frame
+    // (robot 0 spawns unyawed, so chassis frame == world x/y offsets)
+    let th = w.mech_angle(0).unwrap();
+    let (s, c) = th.sin_cos();
+    let p = arm_spec().pivot;
+    let rp = [0.3f32, 0.0, 0.0];
+    let expected = [
+        w.position(0)[0] + p[0] + rp[0] * c,
+        w.position(0)[1] + p[1] + rp[0] * s,
+        w.position(0)[2] + p[2],
+    ];
+    let err = ((deployed[0] - expected[0]).powi(2)
+        + (deployed[1] - expected[1]).powi(2)
+        + (deployed[2] - expected[2]).powi(2))
+    .sqrt();
+    assert!(err < 0.05, "anchor {deployed:?} vs expected {expected:?} (err {err})");
 }
 
 /// Perf smoke: six mechanism-bearing robots vs the six single-body

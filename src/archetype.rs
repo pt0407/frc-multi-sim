@@ -311,12 +311,17 @@ pub struct JointSpec {
     /// wheel-mode rolling radius, m — omega = module_speed / radius
     #[serde(default)]
     pub wheel_radius: f32,
-    /// roller contact zone: chassis-frame anchor [x,y,z] of the roller
-    /// surface. When the joint is spinning, free pieces inside
-    /// `roller_radius` get dragged toward the intake — the MoSim
-    /// InteractionRoller effect (rollers reach beyond the capture AABB).
+    /// roller contact zone anchor. With `on_arm = false` (default) this is
+    /// a chassis-frame [x,y,z] offset. With `on_arm = true`, `roller_pos`
+    /// is arm-local instead: origin at the `[mech]` pivot, +x along the
+    /// arm, and it rotates with the arm angle — for rollers mounted on
+    /// articulated mechanisms (intake arms). The MoSim InteractionRoller
+    /// effect: spinning rollers drag free pieces toward the intake.
     #[serde(default)]
     pub roller_pos: Option<[f32; 3]>,
+    /// mount the roller zone on the robot's `[mech]` arm (revolute only)
+    #[serde(default)]
+    pub on_arm: bool,
     /// roller interaction radius, m (default 0.3)
     #[serde(default)]
     pub roller_radius: Option<f32>,
