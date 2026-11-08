@@ -1,7 +1,7 @@
 name = "blitz"
 # Team "Blitz" — MoSim decompile constants (docs/mosim-robots.md).
 # Dual intake pivots (modeled as one arm), hoodPivot, intake vision
-# array (8-zone, GamePiece1 layer — approximated by our [camera]),
+# array (8-zone, GamePiece1 layer — approximated by our camera),
 # auto-deploy + pass-arc trajectory params are agent-side.
 # manualShotRpm=5000 — highest in the game -> fastest flywheel.
 # Placeholder kitbot visuals until real Blitz CAD is supplied.
@@ -47,7 +47,7 @@ motor_max_force = 400.0
 name = "shooter"
 mode = "spin"
 driver = "shooter"
-mv = 'shooter|Shooter|indexer|Indexer|dead|Dead'
+mv = 'Launcher|55T HTD Belt|shooter|Shooter|indexer|Indexer|dead|Dead'
 max_vel = 400.0
 accel = 300.0    # high-RPM flywheel spools fast
 launch_radius = 0.030
@@ -66,7 +66,7 @@ shot_table = [
 name = "hood"
 mode = "position"
 driver = "hood"
-mv = 'hood|Hood'
+mv = 'KB-26008: Hood|Hood Plate Spacer'
 max_vel = 4.0    # 5.0 / 1.25
 accel = 12.0
 limits = [0.0, 0.61]
@@ -78,7 +78,7 @@ limits = [0.0, 0.61]
 name = "intake-rollers"
 mode = "spin"
 driver = "intake"
-mv = 'intake|Intake'
+mv = 'Roller Shaft|Intake Shaft|Dead Zone Noodle|Flap'
 max_vel = 40.0
 accel = 40.0
 roller_pos = [0.45, 0.15, 0.0]
@@ -89,7 +89,7 @@ roller_axis = [0.0, 0.0, -1.0]
 name = "indexer"
 mode = "spin"
 driver = "intake"
-mv = 'indexer|Indexer|sideFeeder|SideFeeder'
+mv = 'Intake Shaft Small Spacer|sideFeeder|SideFeeder'
 max_vel = 210.0
 accel = 120.0
 

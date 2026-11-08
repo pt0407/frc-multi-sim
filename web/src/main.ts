@@ -129,6 +129,7 @@ const telem = telemEl;
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 const engine = new Engine(canvas, false); // MSAA off — perf over edge smoothing
 const scene = new Scene(engine);
+(window as any).__scene = scene;
 scene.clearColor = new Color4(0.06, 0.07, 0.09, 1);
 
 const camera = new ArcRotateCamera("cam", -Math.PI / 2, 0.55, 30, Vector3.Zero(), scene);
@@ -617,7 +618,9 @@ function bindCadMechs(
   // only parent transform nodes, so direct-only misses every real mesh
   const meshesOf = (n: TransformNode): AbstractMesh[] => {
     const ms = n.getChildMeshes();
-    if (n instanceof Mesh && !ms.includes(n)) ms.push(n);
+    // instanced meshes (common in Onshape exports for repeated parts —
+    // kitbot wheels/pulleys) are InstancedMesh, not Mesh
+    if (n instanceof AbstractMesh && !ms.includes(n)) ms.push(n);
     return ms;
   };
 
