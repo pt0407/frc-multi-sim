@@ -775,6 +775,13 @@ impl World {
         // climb point banks the bonus for its alliance
         if !self.match_finished && self.phase() == MatchPhase::Complete {
             self.award_climb_bonus();
+            // zone-shot penalties are assessed at match end (FRC): each
+            // instance subtracts one point, saturating at zero
+            for a in 0..self.scores.len() {
+                self.scores[a] = self
+                    .scores[a]
+                    .saturating_sub(self.zone_penalty_instances[a]);
+            }
             self.match_finished = true;
         }
     }

@@ -216,6 +216,11 @@ fn zone_shot_penalty_counts_out_of_zone_owner() {
         w.zone_penalty_instances()[0], 3,
         "third consecutive zone shot should penalize +3"
     );
+
+    // penalties are assessed at match end: 3 points - 3 instances = 0
+    w.set_phase(frc_sim_m0::r#match::MatchPhase::Complete, 0.0);
+    w.step(&[None, None]);
+    assert_eq!(w.scores[0], 0, "penalties should subtract at match end");
 }
 
 /// MoSim return points: a piece outside the field bounds is flagged,
