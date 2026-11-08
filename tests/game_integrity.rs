@@ -72,3 +72,46 @@ fn pieces_inside_field() {
     }
 }
 
+
+/// Every MoSim-derived archetype must actually simulate: joints exist,
+/// states stay finite, and the shooter spins up under shooter_on.
+#[test]
+fn mosim_archetypes_simulate() {
+    use frc_sim_m0::{ActuatorFrame, ShotCommand};
+    // empty piece table: this test exercises joints, not piece physics —
+    // 500-piece worlds make it far too slow to run every archetype
+    let field = FieldSpec::load(Path::new("fields/rebuilt.toml")).unwrap();
+    let table = PieceTable::default();
+    for name in ["2910", "4414", "1706", "9483", "blitz", "simbotics", "citruscircuits", "competitiveconcept"] {
+        let a = Archetype::load(Path::new(&format!("archetypes/{name}.toml"))).unwrap();
+        let s = RobotSpec::from_archetype(&a, [-4.0, 0.0]);
+        let mut w = World::with_config(&[s], 7, field.clone(), &table);
+        assert!(!w.joint_states(0).is_empty(), "{name}: no joints");
+        let mut c = ActuatorFrame {
+            force: [0.0, 0.0],
+            torque: 0.0,
+            modules: None,
+            intake_active: false,
+            shoot: Some(ShotCommand {
+                launch_velocity: 12.0,
+                hood_angle: 0.5,
+                turret_yaw: 0.3,
+                launch_height: 0.6,
+            }),
+            mech: None,
+            joints: None,
+            shooter_on: true,
+        };
+        for _ in 0..60 {
+            w.step(&[Some(c.clone()), None, None, None, None, None][..w.num_robots().min(6)]);
+            for js in w.joint_states(0) {
+                assert!(js.pos.iter().all(|v| v.is_finite()) && js.vel.iter().all(|v| v.is_finite()),
+                    "{name}: non-finite joint state");
+            }
+            c.shoot = None; // one shot request, then spin only
+        }
+        let states = w.joint_states(0);
+        let shooter = states.iter().find(|j| j.vel.iter().any(|v| v.abs() > 1.0));
+        assert!(shooter.is_some(), "{name}: no joint spun up");
+    }
+}
