@@ -672,3 +672,53 @@ fn feed_path_routes_piece_through_waypoints() {
         p[1]
     );
 }
+
+/// End-to-end shot table: World::step resolves distance-to-own-hub into
+/// the flywheel target — a robot at ~2 m runs slower than max_vel, not
+/// flat out (MoSim RebuiltInterpolation through the real code path).
+#[test]
+fn shot_table_scales_flywheel_by_hub_distance() {
+    use frc_sim_m0::archetype::{JointDriver, JointMode, JointSpec, ShotPreset};
+
+    let shooter = JointSpec {
+        name: "shooter".into(),
+        mv: "shooter".into(),
+        scope: None,
+        mode: JointMode::Spin,
+        driver: JointDriver::Shooter,
+        axis: None,
+        pivot: None,
+        max_vel: 100.0,
+        accel: 100000.0, // fast servo: isolate the target, not the ramp
+        limits: None,
+        wheel_radius: 0.0,
+        roller_pos: None,
+        roller_radius: None,
+        roller_axis: None,
+        launch_radius: None,
+        muzzle_pos: None,
+        feed_time: None,
+        feed_path: None,
+        on_arm: false,
+        shot_table: Some(vec![
+            ShotPreset { distance: 1.0, flywheel: 0.4, hood: 0.2 },
+            ShotPreset { distance: 5.0, flywheel: 0.8, hood: 0.6 },
+        ]),
+    };
+    let mut specs = chassis::default_specs();
+    specs[0].spawn = [-4.0, specs[0].spawn[1], 0.0];
+    specs[0].joints = vec![shooter];
+    // hub_table: alliance-0 hub at [-2, 0], entry_height 1.0 — robot 0 at
+    // [-4, ~0.4, 0] is ~2.1 m out → interpolated flywheel ≈ 0.51
+    let mut w = World::with_config(&specs, SEED, FieldSpec::default(), &hub_table());
+    let mut on = cmd();
+    on.shooter_on = true;
+    for _ in 0..200 {
+        w.step(&[Some(on.clone()), None]);
+    }
+    let vel = w.joints[0][0].vel[0];
+    assert!(
+        (vel - 51.0).abs() < 5.0,
+        "flywheel should settle near 51% of max_vel at ~2.1 m, got {vel}"
+    );
+}
