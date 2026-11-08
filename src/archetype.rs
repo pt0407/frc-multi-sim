@@ -260,6 +260,10 @@ pub enum JointDriver {
     /// limits — the physical turret. Launch aim uses the joint's actual
     /// angle, not the raw command, so turret slew lag is real.
     Turret,
+    /// position joint tracking `ShotCommand::hood_angle` — the physical
+    /// hood/deflector. Launch elevation uses the joint's actual angle,
+    /// so hood slew lag and a stuck hood change the shot for real.
+    Hood,
 }
 
 /// Kinematic mechanism joint spec — the data-driven equivalent of

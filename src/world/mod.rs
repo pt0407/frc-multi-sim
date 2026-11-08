@@ -1362,10 +1362,18 @@ impl World {
                 .find(|j| j.spec.driver == crate::archetype::JointDriver::Turret)
                 .map(|j| j.pos[0])
                 .unwrap_or(shot.turret_yaw);
-        let hv = shot.launch_velocity * shot.hood_angle.cos();
+        // hood: a physical position joint tracks the commanded angle —
+        // launch elevation uses its actual position (slew lag is real)
+        let hood = joints
+            .into_iter()
+            .flatten()
+            .find(|j| j.spec.driver == crate::archetype::JointDriver::Hood)
+            .map(|j| j.pos[0])
+            .unwrap_or(shot.hood_angle);
+        let hv = shot.launch_velocity * hood.cos();
         let mut vel = [
             hv * aim.cos() + lv.x,
-            shot.launch_velocity * shot.hood_angle.sin(),
+            shot.launch_velocity * hood.sin(),
             hv * aim.sin() + lv.z,
         ];
         // physics-derived exit speed: `launch_radius` sets the magnitude

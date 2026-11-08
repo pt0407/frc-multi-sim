@@ -109,6 +109,19 @@ launch_radius = 0.031
 # height — pieces launch from here, not the chassis center
 muzzle_pos = [0.40, 0.55, 0.0]
 
+# hood: the pivoting deflector (32-17 Hood Assembly) is a physical
+# position joint tracking the shot's hood_angle — launch elevation uses
+# its actual angle, so hood slew lag changes the shot for real
+[[joint]]
+name = "hood"
+mode = "position"
+driver = "hood"
+mv = 'Hood Assembly'
+scope = '32 - R2 Shooter'
+max_vel = 5.0    # rad/s hood slew
+accel = 15.0
+limits = [0.0, 1.2]
+
 # vision camera (AprilTag localization): front-mounted, sees perimeter +
 # hub tags for pose estimates. Detected ids stream in SensorFrame.vision_tags;
 # vision_pose only publishes while a tag is in view.
