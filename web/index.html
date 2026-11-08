@@ -213,9 +213,13 @@
       dws.onopen = () => dws.send(JSON.stringify({type:"Hello",name:"human",robot_id:id,protocol_version:1}));
       dws.onmessage = ev => {
         const m = JSON.parse(ev.data);
-        if (m.type === "Welcome") { dStat.textContent = `driving robot ${id}`; dConn.textContent = "disconnect"; }
+        if (m.type === "Welcome") { dStat.dataset.id = id; dStat.textContent = `driving robot ${id}`; dConn.textContent = "disconnect"; }
         else if (m.type === "Error") { dStat.textContent = "rejected: " + m.message; dws.close(); }
-        else if (m.type === "Sensor") dFrame = m;
+        else if (m.type === "Sensor") {
+          dFrame = m;
+          const id = parseInt(dRobot.value, 10);
+          dStat.textContent = `robot ${id} · held ${m.pieces_held ?? 0} · score ${m.score ?? 0} · ${m.match_state ?? ""} ${Math.round(m.match_time ?? 0)}s`;
+        }
       };
       dws.onclose = () => { dws = null; dFrame = null; mechTarget = null; dConn.textContent = "connect"; dStat.textContent = "disconnected"; };
     };
