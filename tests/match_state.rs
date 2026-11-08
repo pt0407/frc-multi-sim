@@ -37,6 +37,8 @@ fn quick_match() -> MatchConfig {
         climb_radius_m: 1.0,
         shift_s: 0.0,
         preload_fuel: 0,
+        tower_foul_points: 15,
+        foul_cooldown_s: 3.0,
     }
 }
 
@@ -169,6 +171,8 @@ fn scoring_is_attributed_to_phase_and_climb_bonus_lands() {
         climb_radius_m: 1.5,
         shift_s: 0.0,
         preload_fuel: 0,
+        tower_foul_points: 15,
+        foul_cooldown_s: 3.0,
     };
     let mut w = World::with_config(&chassis::default_specs(), SEED, field, &table);
     w.match_clock = MatchClock::new(cfg);
@@ -268,4 +272,47 @@ fn phase_override_holds_expires_and_scores() {
     assert_eq!(w.score_by_phase[0].endgame, 25);
     w.clear_phase();
     assert!(!w.phase_override_active());
+}
+
+/// Tower protection (MoSim TowerProtection): during endgame, an enemy
+/// robot bumping a robot on the tower racks a foul instance for the
+/// intruder's alliance; at match end the tower's alliance banks 15
+/// penalty points per instance.
+#[test]
+fn tower_foul_awards_penalty_points_to_defender() {
+    let field = FieldSpec {
+        climb_points: vec![ClimbPointSpec {
+            name: "tower-west-top".into(),
+            pos: [-7.21, 1.83, 0.29],
+        }],
+        ..Default::default()
+    };
+    let mut specs = chassis::default_specs();
+    // robot 0 (alliance 0, west tower owner) parked up on the tower;
+    // robot 1 (alliance 1) on the floor beside it — the intruder
+    specs[0].spawn = [-7.0, 1.6, 0.29];
+    specs[1].spawn = [-6.6, specs[1].spawn[1], 0.29];
+    let table = PieceTable::default();
+    let mut w = World::with_config(&specs, SEED, field, &table);
+    // isolate the foul rule: no climb bonus for parking near the anchor
+    w.match_clock = MatchClock::new(MatchConfig {
+        climb_bonus_points: 0,
+        ..Default::default()
+    });
+
+    w.set_phase(MatchPhase::Endgame, 5.0);
+    for _ in 0..10 {
+        w.step(&[None, None]);
+    }
+    assert_eq!(
+        w.tower_foul_instances()[1], 1,
+        "enemy bump on the tower should foul once (cooldown blocks repeats)"
+    );
+    assert_eq!(w.tower_foul_instances()[0], 0);
+
+    // match end: alliance 1's foul pays alliance 0 fifteen points
+    w.set_phase(MatchPhase::Complete, 0.0);
+    w.step(&[None, None]);
+    assert_eq!(w.scores[0], 15, "defender should bank the penalty points");
+    assert_eq!(w.scores[1], 0);
 }

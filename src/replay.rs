@@ -44,7 +44,7 @@ use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 
 const MAGIC: &[u8; 4] = b"FMSL";
-const FORMAT_VERSION: u32 = 5;
+const FORMAT_VERSION: u32 = 6;
 const KIND_CMD: u8 = 1;
 const KIND_STATE: u8 = 2;
 
@@ -202,6 +202,9 @@ impl LogWriter {
                 }
                 w.write_all(&m.climb_bonus_points.to_le_bytes())?;
                 w.write_all(&m.climb_radius_m.to_le_bytes())?;
+                // v6: tower-foul rule config
+                w.write_all(&m.tower_foul_points.to_le_bytes())?;
+                w.write_all(&m.foul_cooldown_s.to_le_bytes())?;
             }
             None => w.write_all(&[0])?,
         }
@@ -469,6 +472,17 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
                     climb_radius_m: rad,
                     shift_s: 0.0,
                     preload_fuel: 0,
+                    // v6 fields; older logs replay with the defaults
+                    tower_foul_points: if fmt >= 6 {
+                        r_u32(&mut r)?
+                    } else {
+                        15
+                    },
+                    foul_cooldown_s: if fmt >= 6 {
+                        r_f32(&mut r)?
+                    } else {
+                        3.0
+                    },
                 })
             } else {
                 None

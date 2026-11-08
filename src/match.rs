@@ -112,6 +112,21 @@ pub struct MatchConfig {
     /// fuel each robot starts holding (game manual 6.3.4, up to 8)
     #[serde(default)]
     pub preload_fuel: u32,
+    /// tower-protection foul: an enemy robot bumping a robot on the
+    /// tower during endgame awards this many penalty points to the
+    /// tower's alliance per instance (MoSim TowerProtection = 15)
+    #[serde(default = "tfoul_default")]
+    pub tower_foul_points: u32,
+    /// per-robot cooldown between tower fouls, seconds (MoSim = 3)
+    #[serde(default = "fcool_default")]
+    pub foul_cooldown_s: f32,
+}
+
+fn tfoul_default() -> u32 {
+    15
+}
+fn fcool_default() -> f32 {
+    3.0
 }
 
 impl Default for MatchConfig {
@@ -125,6 +140,8 @@ impl Default for MatchConfig {
             climb_radius_m: 1.0,
             shift_s: 0.0,
             preload_fuel: 0,
+            tower_foul_points: 15,
+            foul_cooldown_s: 3.0,
         }
     }
 }

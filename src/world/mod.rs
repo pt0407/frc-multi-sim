@@ -125,6 +125,10 @@ pub struct World {
     zone_penalty_instances: [u32; 2],
     zone_penalty_consec: u32,
     zone_penalty_last_tick: Option<u64>,
+    /// tower-protection fouls (MoSim TowerProtection): instances per
+    /// *intruding* alliance + per-robot cooldown timestamps
+    tower_foul_instances: [u32; 2],
+    last_foul_tick: Vec<u64>,
     /// per-robot held-piece inventory, fed by intake captures and consumed
     /// by shots
     pub held: Vec<u32>,
@@ -228,6 +232,8 @@ impl World {
             zone_penalty_instances: [0; 2],
             zone_penalty_consec: 0,
             zone_penalty_last_tick: None,
+            tower_foul_instances: [0; 2],
+            last_foul_tick: vec![u64::MAX; specs.len()],
             held: vec![0; specs.len()],
             scores: [0; 2],
             hubs: table.hubs.clone(),
@@ -802,6 +808,7 @@ impl World {
             &(),
         );
         self.update_game_pieces();
+        self.check_tower_fouls();
         self.tick += 1;
         // phase override expiry (issue #33)
         if let Some((_, remaining)) = &mut self.phase_override {
@@ -821,6 +828,16 @@ impl World {
                 self.scores[a] = self
                     .scores[a]
                     .saturating_sub(self.zone_penalty_instances[a]);
+            }
+            // tower-protection fouls award penalty points to the
+            // non-fouling alliance (MoSim TowerProtection: 15 pts per
+            // instance, credited to the opponent at match end)
+            for a in 0..2 {
+                let pts = self.match_clock.config.tower_foul_points
+                    * self.tower_foul_instances[a];
+                if pts > 0 {
+                    self.scores[1 - a] = self.scores[1 - a].saturating_add(pts);
+                }
             }
             self.match_finished = true;
         }
@@ -851,6 +868,74 @@ impl World {
     /// score by whatever consumes match results.
     pub fn zone_penalty_instances(&self) -> [u32; 2] {
         self.zone_penalty_instances
+    }
+
+    /// Tower-protection fouls (MoSim `TowerProtection`, endgame only):
+    /// an enemy-of-the-tower-owner robot whose bumper touches a robot on
+    /// the tower racks up a foul instance for ITS alliance (15 penalty
+    /// points to the opponent at match end), with a per-robot cooldown.
+    /// "On the tower" is approximated by climb-point proximity + height
+    /// until real rung/climb colliders exist; bumper touch is a 3D
+    /// center-distance check standing in for collider overlap.
+    fn check_tower_fouls(&mut self) {
+        if self.phase() != MatchPhase::Endgame {
+            return;
+        }
+        let cfg = self.match_clock.config;
+        if cfg.tower_foul_points == 0 || self.field.climb_points.is_empty() {
+            return;
+        }
+        let cooldown = (cfg.foul_cooldown_s / self.integration.dt) as u64;
+        // victims: robots alongside a tower anchor and elevated on it
+        let mut victims: Vec<(usize, usize)> = Vec::new();
+        for (i, handle) in self.chassis.iter().enumerate() {
+            let t = self.bodies[*handle].translation();
+            for c in &self.field.climb_points {
+                let dx = t.x - c.pos[0];
+                let dz = t.z - c.pos[2];
+                if dx * dx + dz * dz <= 1.5 * 1.5 && t.y > 0.8 {
+                    // tower owner = the alliance on that side of the field
+                    victims.push((i, if c.pos[0] < 0.0 { 0 } else { 1 }));
+                }
+            }
+        }
+        if victims.is_empty() {
+            return;
+        }
+        for &(vi, owner) in &victims {
+            let vp = self.bodies[self.chassis[vi]].translation();
+            for (j, handle) in self.chassis.iter().enumerate() {
+                if j == vi {
+                    continue;
+                }
+                let ja = j % 2;
+                // intruder must be enemy of the tower's owner alliance
+                if ja == owner {
+                    continue;
+                }
+                let last = self.last_foul_tick[j];
+                if last != u64::MAX
+                    && self.tick.saturating_sub(last) < cooldown
+                {
+                    continue;
+                }
+                let it = self.bodies[*handle].translation();
+                let dx = it.x - vp.x;
+                let dy = it.y - vp.y;
+                let dz = it.z - vp.z;
+                // bumper contact ~ chassis-width apart; 1.3 m covers the
+                // bumper faces plus a small overlap margin
+                if dx * dx + dy * dy + dz * dz <= 1.3 * 1.3 {
+                    self.last_foul_tick[j] = self.tick;
+                    self.tower_foul_instances[ja] += 1;
+                }
+            }
+        }
+    }
+
+    /// Tower-protection foul instances per intruding alliance.
+    pub fn tower_foul_instances(&self) -> [u32; 2] {
+        self.tower_foul_instances
     }
 
     /// `climb_bonus_points` for its alliance (counted in the endgame

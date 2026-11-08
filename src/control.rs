@@ -92,6 +92,7 @@ struct Status {
     scores: [u32; 2],
     score_by_phase: [crate::r#match::PhaseScore; 2],
     zone_penalties: [u32; 2],
+    tower_fouls: [u32; 2],
     override_active: bool,
 }
 
@@ -103,6 +104,7 @@ fn status(world: &World) -> Status {
         scores: world.scores,
         score_by_phase: world.score_by_phase,
         zone_penalties: world.zone_penalty_instances(),
+        tower_fouls: world.tower_foul_instances(),
         override_active: world.phase_override_active(),
     }
 }
