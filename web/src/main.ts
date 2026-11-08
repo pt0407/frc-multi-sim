@@ -259,7 +259,11 @@ let built = false;
 async function buildField() {
   if (!fieldCfg || built) return;
   built = true;
-  const glbUrl = fieldCfg.glb_url;
+  // ?field=/path.glb overrides the config's field GLB — used to compare
+  // alternate field renders (e.g. locally-extracted assets) without
+  // changing server config
+  const fieldOverride = new URLSearchParams(location.search).get("field");
+  const glbUrl = fieldOverride ?? fieldCfg.glb_url;
   if (glbUrl) {
     // primitives are the fallback if the GLB 404s/fails to parse
     tryLoadFieldGlb(glbUrl).then((ok) => {
