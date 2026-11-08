@@ -134,6 +134,8 @@ mod tests {
                 intake_active: false,
                 shoot: None,
                 mech: None,
+                joints: None,
+                shooter_on: false,
             },
         );
         assert!(slots.snapshot()[0].is_some());

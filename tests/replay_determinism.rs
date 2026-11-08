@@ -25,6 +25,8 @@ fn scripted_cmd(tick: u64, robot: usize) -> Option<ActuatorFrame> {
         intake_active: false,
         shoot: None,
         mech: None,
+        joints: None,
+        shooter_on: false,
     })
 }
 

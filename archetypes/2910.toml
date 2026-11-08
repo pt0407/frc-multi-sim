@@ -6,9 +6,12 @@ max_force = 1200.0
 drivetrain = "swerve"
 
 [model]
-url = "/robot-assets/2910.glb"
+# Robot 2 top-level assembly export — named part hierarchy preserved
+# (62-R2 Hopper, 42-R2 Intake, Pivoting Intake, 32-R2 Shooter & Feeder,
+# 4x SDS MK5n swerve, 22-2026 R2 Drivebase). Z-up, meters; -90°X uprights it.
+url = "/robot-assets/2910-r2.glb"
 scale = 1.0
-offset = [-0.13, -0.231, 0.0]
+offset = [0.0, -0.25, -0.09]
 rotation_deg = [-90.0, 0.0, 0.0]
 
 [sensors]
@@ -37,3 +40,50 @@ limits = [-0.5, 1.3]
 motor_stiffness = 300.0
 motor_damping = 30.0
 motor_max_force = 400.0
+
+# --- kinematic mechanism joints ([[joint]] = MoSim-style components) ---
+# Server simulates each joint's state (accel-limited motor model) and
+# streams it to the viz, which binds the named CAD subtrees. Wheel joints
+# bind before steer so nested wheel geometry claims its meshes first.
+
+# swerve wheels: omega = chassis speed along steer dir / radius. MK5
+# molded wheel ~4" diameter -> 0.05 m radius.
+[[joint]]
+name = "swerve-wheel"
+mode = "wheel"
+driver = "command"
+mv = '^SDS MK5 Molded Wheel$'
+wheel_radius = 0.05
+max_vel = 60.0
+accel = 120.0
+
+# swerve turrets: yaw servo toward each module's commanded steer angle.
+[[joint]]
+name = "swerve-steer"
+mode = "steer"
+driver = "command"
+mv = '^SDS MK5 Turret Assembly$'
+max_vel = 6.0     # rad/s steer speed
+accel = 18.0
+
+# intake rollers: spin while intake is active (they're inside the arm
+# subtree so they swing down with it AND spin)
+[[joint]]
+name = "intake-rollers"
+mode = "spin"
+driver = "intake"
+mv = 'Roller Deadaxle|2" Roller Assembly'
+max_vel = 18.0
+accel = 30.0
+
+# shooter: blades, drum, compliant wheels, hood/feed rollers — one joint,
+# every matched subtree shares the flywheel angle. Spins up on shoot
+# requests or shooter_on, shots gate on reaching speed.
+[[joint]]
+name = "shooter"
+mode = "spin"
+driver = "shooter"
+mv = 'Blades|Main Drum|Compliant Wheel|Thin Aluminum Roller|Hood Roller'
+scope = '32 - R2 Shooter'
+max_vel = 40.0    # rad/s flywheel speed
+accel = 60.0      # rad/s^2 spin-up

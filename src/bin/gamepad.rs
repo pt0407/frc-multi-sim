@@ -189,6 +189,8 @@ async fn main() -> Result<()> {
                 intake_active: pad.intake,
                 shoot,
                 mech: None,
+                joints: None,
+                shooter_on: false,
             }))
             .unwrap()
             .into(),

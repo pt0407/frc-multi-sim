@@ -3,7 +3,7 @@
 //! `RobotSpec` is the spawn-time physical description of one robot — what an
 //! archetype config resolves to. Spawn pose is stored per-spec so replay
 //! headers can carry the exact initial conditions.
-use crate::archetype::{Archetype, IntakeSpec, MechSpec, ModelSpec};
+use crate::archetype::{Archetype, IntakeSpec, JointSpec, MechSpec, ModelSpec};
 use crate::world::noise::SensorConfig;
 use rapier3d::prelude::*;
 
@@ -12,9 +12,11 @@ pub const ROBOT_MASS: f32 = 60.0; // kg
 /// Default lineup size (issue #11): 3 per alliance, alliance = robot_id % 2.
 pub const NUM_ROBOTS: usize = 6;
 /// Distance of each alliance's station row from midfield (m).
-pub const ALLIANCE_X: f32 = 4.8;
+/// MoSim REBUILT scene: First/SecondSpawnPoint at x=±4.642.
+pub const ALLIANCE_X: f32 = 4.642;
 /// Spacing between stations along z within an alliance row (m).
-pub const STATION_SPACING: f32 = 2.0;
+/// MoSim spawn points sit at z=±1.517.
+pub const STATION_SPACING: f32 = 1.517;
 
 /// Spawn-time physical params for one robot (archetype or default).
 #[derive(Debug, Clone, PartialEq)]
@@ -35,6 +37,9 @@ pub struct RobotSpec {
     /// classic single rigid body
     /// articulated mechanism parts (issue #61): intake arms, elevators
     pub mechs: Vec<MechSpec>,
+    /// kinematic mechanism joints (spin/position/steer/wheel) simulated
+    /// server-side and bound to CAD subtrees by the viz client
+    pub joints: Vec<JointSpec>,
 }
 
 impl RobotSpec {
@@ -48,6 +53,7 @@ impl RobotSpec {
             sensors: SensorConfig::default(),
             model: None,
             mechs: Vec::new(),
+            joints: Vec::new(),
         }
     }
 
@@ -61,6 +67,7 @@ impl RobotSpec {
             sensors: a.sensors.resolved(),
             model: a.model.clone(),
             mechs: a.mechs.clone(),
+            joints: a.joints.clone(),
         }
     }
 }

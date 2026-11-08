@@ -21,6 +21,8 @@ fn cmd() -> ActuatorFrame {
         intake_active: false,
         shoot: None,
         mech: None,
+        joints: None,
+        shooter_on: false,
     }
 }
 
@@ -142,6 +144,7 @@ fn scoring_is_attributed_to_phase_and_climb_bonus_lands() {
         pos: [-4.0, 1.5, 0.0],
     });
     let table = PieceTable {
+            points: vec![],
         zones: vec![SpawnZone {
             center: [4.0, 2.0],
             half_extents: [0.01, 0.01],

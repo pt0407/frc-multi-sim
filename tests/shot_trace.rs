@@ -17,6 +17,8 @@ fn trace_shot() {
         force: [0.0,0.0], torque: 0.0, modules: None, intake_active: false,
         shoot: Some(ShotCommand { launch_velocity: 6.5, hood_angle: 1.25, turret_yaw: 0.0, launch_height: 0.6 }),
         mech: None,
+        joints: None,
+        shooter_on: false,
     };
     w.step(&[Some(shot)]);
     for t in 0..600 {

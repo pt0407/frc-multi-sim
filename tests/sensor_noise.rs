@@ -123,6 +123,8 @@ fn vision_estimate_trails_moving_truth() {
         intake_active: false,
         shoot: None,
         mech: None,
+        joints: None,
+        shooter_on: false,
     };
     let mut saw_lag = false;
     for tick in 0u64..400 {

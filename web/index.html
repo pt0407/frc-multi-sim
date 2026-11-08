@@ -49,6 +49,17 @@
     <div style="display:flex;gap:14px;margin-top:36px">
       <button id="h-match" style="background:#059669;color:#fff;border:none;border-radius:10px;padding:14px 30px;font:700 15px monospace;cursor:pointer">▶ RUN MATCH</button>
       <button id="h-practice" style="background:#1f2937;color:#dfe6ee;border:1px solid #374151;border-radius:10px;padding:14px 30px;font:600 15px monospace;cursor:pointer">Practice / Free Drive</button>
+      <button id="h-anim" style="background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:14px 30px;font:700 15px monospace;cursor:pointer">ANIMATION TEST</button>
+    </div>
+    <div style="margin-top:26px;display:flex;gap:10px;align-items:center">
+      <label style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px">robot</label>
+      <select id="h-arch" style="background:#1f2937;color:#dfe6ee;border:1px solid #374151;border-radius:6px;padding:8px 10px;font:600 12px monospace"></select>
+      <label style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px">×</label>
+      <select id="h-count" style="background:#1f2937;color:#dfe6ee;border:1px solid #374151;border-radius:6px;padding:8px 10px;font:600 12px monospace">
+        <option value="1">1</option><option value="2">2</option><option value="3">3</option>
+        <option value="4">4</option><option value="5">5</option><option value="6">6</option>
+      </select>
+      <span id="h-lineup-note" style="font-size:10px;color:#4b5563"></span>
     </div>
     <p style="color:#4b5563;font-size:11px;margin-top:28px">camera: 1 overview · 2 robot · 3 red · 4 blue · drag to orbit · scroll to zoom</p>
   </div>
@@ -80,14 +91,30 @@
   </div>
 
   <div id="telem"><b>telemetry</b><br>…</div>
+  <div id="anim-hud" style="display:none;position:fixed;top:14px;left:50%;transform:translateX(-50%);background:#1f2937ee;border:1px solid #7c3aed;border-radius:10px;color:#dfe6ee;padding:10px 18px;font:700 14px monospace;z-index:105;pointer-events:none"></div>
   <div id="banner">READY — press START</div>
   <canvas id="renderCanvas"></canvas>
   <script type="module" src="/src/main.ts"></script>
   <script>
     const cws = new WebSocket("ws://127.0.0.1:9772");
     const $ = id => document.getElementById(id);
+    // home-screen lineup picker: archetype list comes from the server's
+    // control channel; launching rebuilds the world with that lineup
+    const archSel = $("h-arch"), countSel = $("h-count"), note = $("h-lineup-note");
+    let lineupDirty = false;
+    cws.onopen = () => cws.send(JSON.stringify({op:"list_archetypes"}));
     cws.onmessage = (e) => {
       const s = JSON.parse(e.data);
+      if (s.archetypes) {
+        archSel.innerHTML = "";
+        for (const a of s.archetypes) {
+          const o = document.createElement("option");
+          o.value = a; o.textContent = a;
+          archSel.appendChild(o);
+        }
+        if (s.archetypes.includes("2910")) archSel.value = "2910";
+        return;
+      }
       const pill = $("phase-pill");
       pill.className = s.phase; pill.id = "phase-pill";
       pill.textContent = s.phase;
@@ -100,6 +127,16 @@
       } else sh.className = "";
       $("banner").style.display = s.phase === "disabled" ? "block" : "none";
     };
+    const applyLineup = () => {
+      const n = parseInt(countSel.value, 10);
+      const names = Array.from({length: n}, () => archSel.value);
+      cws.send(JSON.stringify({op:"set_lineup", archetypes:names}));
+      note.textContent = `lineup: ${names.join(" + ")}`;
+      lineupDirty = true;
+      // viz config (models/mechs per robot) is per-connection — reconnect
+      // so the client picks up the new lineup's robot configs
+      setTimeout(() => window.frcReconnect?.(), 400);
+    };
     const dismissLoad = () => {
       const l = document.getElementById("load");
       if (l) l.classList.add("done");
@@ -107,11 +144,20 @@
       if (h) h.style.display = "none";
     };
     document.getElementById("h-match").onclick = () => {
+      if (lineupDirty || archSel.value !== "2910" || countSel.value !== "1") applyLineup();
       dismissLoad();
       cws.send(JSON.stringify({op:"reset"}));
-      setTimeout(() => cws.send(JSON.stringify({op:"start_match"})), 300);
+      setTimeout(() => cws.send(JSON.stringify({op:"start_match"})), 600);
     };
     document.getElementById("h-practice").onclick = () => {
+      if (lineupDirty || archSel.value !== "2910" || countSel.value !== "1") applyLineup();
+      dismissLoad();
+      cws.send(JSON.stringify({op:"reset"}));
+    };
+    document.getElementById("h-anim").onclick = () => {
+      // mechanism demo: arm sweeps, shooter spins, rollers run, turrets
+      // yaw — ignores match state so you can check the CAD bindings
+      window.frcAnimTest?.();
       dismissLoad();
       cws.send(JSON.stringify({op:"reset"}));
     };

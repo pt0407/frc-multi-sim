@@ -20,6 +20,8 @@ fn cmd(force: [f32; 2], torque: f32) -> ActuatorFrame {
         intake_active: false,
         shoot: None,
         mech: None,
+        joints: None,
+        shooter_on: false,
     }
 }
 

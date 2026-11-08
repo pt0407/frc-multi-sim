@@ -313,6 +313,7 @@ mod tests {
             vision_pose: None,
             mech_angle: None,
             hub_active: true,
+            joints: Vec::new(),
         }
     }
 
@@ -408,6 +409,8 @@ mod tests {
             intake_active: false,
             shoot: None,
             mech: None,
+            joints: None,
+            shooter_on: false,
         });
         let obs = b.build(0, &f, &w);
         let tail = &obs[obs.len() - 6..];

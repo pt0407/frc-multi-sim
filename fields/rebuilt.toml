@@ -223,20 +223,50 @@ pos          = [7.6, 0.92, -0.29]
 half_extents = [0.55, 0.92, 0.62]
 friction     = 0.5
 
-# DEPOT — GE-266xx floor rails (~5 cm tall) holding staged Fuel near each
-# alliance wall. West depot at -z, east depot at +z (mirrored).
+# DEPOT — GE-266xx floor rails (~5 cm tall) bordering each alliance's
+# staged Fuel. Perimeter rails only (fuel rests on the field floor at
+# y≈0.08 between them — NOT a solid pan). Sized to sit just outside the
+# exact MoSim stash footprint so no spawned piece intersects a rail.
 [[obstacles]]
 kind         = "box"
-name         = "depot-west"
-pos          = [-7.85, 0.03, -1.93]
-half_extents = [0.37, 0.03, 0.50]
+name         = "depot-west-rail-x"
+pos          = [-7.62, 0.025, -1.93]
+half_extents = [0.02, 0.025, 0.45]
 friction     = 0.45
 
 [[obstacles]]
 kind         = "box"
-name         = "depot-east"
-pos          = [7.85, 0.03, 1.93]
-half_extents = [0.37, 0.03, 0.50]
+name         = "depot-west-rail-z1"
+pos          = [-7.93, 0.025, -1.42]
+half_extents = [0.33, 0.025, 0.02]
+friction     = 0.45
+
+[[obstacles]]
+kind         = "box"
+name         = "depot-west-rail-z2"
+pos          = [-7.93, 0.025, -2.44]
+half_extents = [0.33, 0.025, 0.02]
+friction     = 0.45
+
+[[obstacles]]
+kind         = "box"
+name         = "depot-east-rail-x"
+pos          = [7.62, 0.025, 1.93]
+half_extents = [0.02, 0.025, 0.45]
+friction     = 0.45
+
+[[obstacles]]
+kind         = "box"
+name         = "depot-east-rail-z1"
+pos          = [7.93, 0.025, 1.42]
+half_extents = [0.33, 0.025, 0.02]
+friction     = 0.45
+
+[[obstacles]]
+kind         = "box"
+name         = "depot-east-rail-z2"
+pos          = [7.93, 0.025, 2.44]
+half_extents = [0.33, 0.025, 0.02]
 friction     = 0.45
 
 # --- placeholders (no colliders; emitted to viz + hashed into replays) ----

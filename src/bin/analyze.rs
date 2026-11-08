@@ -201,6 +201,8 @@ impl RobotBrain {
             intake_active: self.intake_on,
             shoot,
             mech: self.mech_last,
+            joints: None,
+            shooter_on: false,
         }
     }
 }

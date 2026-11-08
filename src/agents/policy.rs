@@ -106,6 +106,8 @@ impl Policy for LinearPolicy {
             intake_active: out[0].abs() < 0.5, // stub heuristic: intake while not driving hard
             shoot: None,
             mech: None,
+            joints: None,
+            shooter_on: false,
         }
     }
 }
@@ -242,6 +244,7 @@ mod tests {
             vision_pose: None,
             mech_angle: None,
             hub_active: true,
+            joints: Vec::new(),
         }
     }
 

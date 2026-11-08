@@ -51,6 +51,21 @@ pub struct SensorFrame {
     /// time shots vs hold fuel.
     #[serde(default = "default_true")]
     pub hub_active: bool,
+    /// mechanism joint telemetry (spin/position/steer/wheel): name, mode,
+    /// per-channel angle (rad) and velocity (rad/s). Encoder feedback for
+    /// agents driving `[[joint]]` mechanisms.
+    #[serde(default)]
+    pub joints: Vec<JointState>,
+}
+
+/// Telemetry for one mechanism joint — parallel channels for steer/wheel
+/// (one per drivetrain module) or a single channel for spin/position.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct JointState {
+    pub name: String,
+    pub mode: String,
+    pub pos: Vec<f32>,
+    pub vel: Vec<f32>,
 }
 
 fn default_true() -> bool {
@@ -102,6 +117,35 @@ pub struct ActuatorFrame {
     /// an effect when the archetype declares a `[mech]` section.
     #[serde(default)]
     pub mech: Option<MechCommand>,
+    /// commands for the robot's `[[joint]]` mechanism joints, addressed
+    /// by index into the archetype's joint list. Only affects joints
+    /// whose driver is `command`; intake/shooter joints are autonomous.
+    #[serde(default)]
+    pub joints: Option<Vec<JointCommand>>,
+    /// enable the shooter flywheel(s): shooter-driver joints spin up.
+    /// A `shoot` request also spins them up and waits for speed before
+    /// releasing, so agents can either pre-spin or just request shots.
+    #[serde(default)]
+    pub shooter_on: bool,
+}
+
+/// Command for one `[[joint]]` mechanism joint.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+pub struct JointCommand {
+    /// index into the archetype's `[[joint]]` list
+    pub joint: usize,
+    pub mode: JointCmdMode,
+    /// meaning depends on mode: angle (rad) for position, rad/s for
+    /// velocity, nonzero sign for on/off
+    pub target: f32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum JointCmdMode {
+    Position,
+    Velocity,
+    OnOff,
 }
 
 /// Mechanism actuator command (issue #57 spike): position-servo target for
@@ -161,6 +205,8 @@ mod tests {
                 launch_height: 0.5,
             }),
             mech: Some(MechCommand { joint: 0, target: -0.5 }),
+            joints: None,
+            shooter_on: false,
         });
         let s = serde_json::to_string(&m).unwrap();
         eprintln!("{}", s);

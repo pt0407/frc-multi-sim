@@ -21,6 +21,7 @@ fn intake_captures_in_pile() {
     let cmd = ActuatorFrame {
         force: [0.0,0.0], torque: 0.0, modules: None,
         intake_active: true, shoot: None, mech: None,
+        joints: None, shooter_on: false,
     };
     for _ in 0..400 { w.step(&[Some(cmd.clone()), None]); }
     eprintln!("held={} pieces={}", w.held[0], w.pieces.len());

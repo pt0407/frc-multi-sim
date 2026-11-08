@@ -97,12 +97,21 @@ pub struct HubZone {
 /// entry_height = 1.0
 /// alliance = 0
 /// ```
+/// Exact piece spawn position (e.g. layouts extracted from a reference
+/// sim's staged fuel). `pos` is the piece centre [x, y, z].
+#[derive(Debug, Clone, Copy, Deserialize)]
+pub struct PointSpawn {
+    pub pos: [f32; 3],
+}
+
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct PieceTable {
     #[serde(default, rename = "zone")]
     pub zones: Vec<SpawnZone>,
     #[serde(default, rename = "hub")]
     pub hubs: Vec<HubZone>,
+    #[serde(default, rename = "point")]
+    pub points: Vec<PointSpawn>,
 }
 
 impl PieceTable {
@@ -114,7 +123,7 @@ impl PieceTable {
     }
 
     pub fn piece_count(&self) -> usize {
-        self.zones.iter().map(|z| z.count as usize).sum()
+        self.zones.iter().map(|z| z.count as usize).sum::<usize>() + self.points.len()
     }
 }
 
@@ -183,6 +192,9 @@ pub fn spawn_table(
             out.push(spawn_piece(bodies, colliders, [x, y, zz], [0.0; 3]));
             i += 1;
         }
+    }
+    for p in &table.points {
+        out.push(spawn_piece(bodies, colliders, p.pos, [0.0; 3]));
     }
     out
 }

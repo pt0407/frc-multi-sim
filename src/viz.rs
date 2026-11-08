@@ -40,6 +40,9 @@ pub struct VizFrame {
     pub mech_angles: Vec<Option<f32>>,
     /// per-robot intake-run flag (drives roller/spinner animation)
     pub intake_active: Vec<bool>,
+    /// robots in the current world — spectators prune stale sensor frames
+    /// after a lineup change (home-screen robot select)
+    pub robot_count: usize,
 }
 
 /// Emit the loaded field layout (issue #14) so web clients can render the
@@ -98,6 +101,13 @@ pub fn config_msg(field: &FieldSpec, specs: &[RobotSpec]) -> String {
                         })
                     }),
                     "intake": s.intake,
+                    // articulated mech specs so the client can bind CAD
+                    // subtrees to the same joint pivots physics uses
+                    "mechs": s.mechs,
+                    // kinematic mechanism joints (spin/position/steer/
+                    // wheel): mv regex + motor params for CAD binding,
+                    // state arrives per-tick in the robots[] "joints" field
+                    "joints": s.joints,
                 })
             })
             .collect::<Vec<_>>(),
@@ -125,6 +135,7 @@ async fn state_collector(
         hub_active: None,
         mech_angles: Vec::new(),
         intake_active: Vec::new(),
+        robot_count: usize::MAX,
     };
     let mut iv = interval(Duration::from_secs_f32(1.0 / VIZ_HZ));
     loop {
@@ -148,6 +159,9 @@ async fn state_collector(
                     continue;
                 }
                 let tick = latest.values().map(|f| f.tick).max().unwrap_or(0);
+                // lineup changes shrink/grow the world — drop frames for
+                // robots that no longer exist so ghosts don't linger
+                latest.retain(|id, _| *id < world_state.robot_count);
                 let robots: Vec<_> = latest
                     .iter()
                     .map(|(id, f)| {
@@ -158,6 +172,7 @@ async fn state_collector(
                             "linvel": f.linvel,
                             "angvel": f.angvel,
                             "contact_impulse": f.contact_impulse,
+                            "joints": f.joints,
                         })
                     })
                     .collect();
@@ -171,6 +186,8 @@ async fn state_collector(
                     "match_state": world_state.match_state.name(),
                     "match_time": world_state.match_time,
                     "hub_active": world_state.hub_active,
+                    "mech_angles": world_state.mech_angles,
+                    "intake_active": world_state.intake_active,
                 })
                 .to_string();
                 // ok if no spectators connected
@@ -186,7 +203,7 @@ pub async fn run(
     sensor_tx: broadcast::Sender<(usize, SensorFrame)>,
     world_tx: broadcast::Sender<VizFrame>,
     field: FieldSpec,
-    specs: Vec<RobotSpec>,
+    specs: std::sync::Arc<std::sync::Mutex<Vec<RobotSpec>>>,
 ) -> Result<()> {
     let listener = TcpListener::bind(("127.0.0.1", VIZ_PORT)).await?;
     println!("spectator stream listening on ws://127.0.0.1:{VIZ_PORT}");
@@ -197,7 +214,9 @@ pub async fn run(
     loop {
         let (stream, addr) = listener.accept().await?;
         let mut rx = viz_tx.subscribe();
-        let cfg = config_msg(&field, &specs);
+        // lineup can change at runtime (home-screen select) — read the
+        // shared spec list per connection so config matches the world
+        let cfg = config_msg(&field, &specs.lock().unwrap().clone());
         tokio::spawn(async move {
             let Ok(ws) = tokio_tungstenite::accept_async(stream).await else {
                 return;

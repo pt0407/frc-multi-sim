@@ -100,6 +100,8 @@ async fn main() -> Result<()> {
                 intake_active: false,
                 shoot: None,
                 mech: None,
+                joints: None,
+                shooter_on: false,
             }))
             .unwrap()
             .into(),

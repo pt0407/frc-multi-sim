@@ -4,6 +4,7 @@
 //! simulation deterministic and replayable (issue #5).
 pub mod chassis;
 pub mod field;
+pub mod joint;
 pub mod mech;
 pub mod noise;
 pub mod pieces;
@@ -86,6 +87,10 @@ pub struct World {
     /// specs that opt in via `[mech]`; `None` robots stay single-body
     /// articulated mechanism parts per robot (issue #61)
     pub mechs: Vec<Vec<mech::Mech>>,
+    /// per-robot kinematic mechanism joints (`[[joint]]` specs): spin,
+    /// position, swerve steer and wheel channels simulated server-side
+    /// and streamed to the viz for CAD binding
+    pub joints: Vec<Vec<joint::JointSim>>,
 }
 
 impl World {
@@ -152,6 +157,7 @@ impl World {
             phase_override: None,
             sensors: Vec::new(),
             mechs: Vec::new(),
+            joints: Vec::new(),
         };
 
         // issue #42: a GLB field mesh CAN replace the placeholder
@@ -238,6 +244,14 @@ impl World {
                 ));
             }
             w.mechs.push(mlist);
+            w.joints.push(
+                spec.joints
+                    .iter()
+                    .map(|js| {
+                        joint::JointSim::new(js.clone(), w.drivetrains[i].module_count())
+                    })
+                    .collect(),
+            );
             println!(
                 "robot {} spawned at x={} mass={} half={:?} mech={}",
                 i,
@@ -348,6 +362,8 @@ impl World {
                 intake_active: false,
                 shoot: None,
                 mech: None,
+                joints: None,
+                shooter_on: false,
             };
             let cmd = cmd.unwrap_or(&zero);
             {
@@ -371,6 +387,43 @@ impl World {
                     dt: self.integration.dt,
                 };
                 self.intake_active[i] = cmd.intake_active;
+                // kinematic mechanism joints: advance spin/position/steer/
+                // wheel channels with the motor model. Wheel channels need
+                // chassis speed in the robot frame for the rolling omega.
+                let lv_robot = {
+                    let (s, c) = yaw.sin_cos();
+                    [lv.x * c - lv.z * s, lv.x * s + lv.z * c]
+                };
+                let n_joints = self.joints.get(i).map(|j| j.len()).unwrap_or(0);
+                if n_joints > 0 {
+                    // split borrows: joints mutate, drivetrain reads
+                    let (js, dt_) = {
+                        let js = self.joints.get_mut(i).unwrap();
+                        let dt_ = &self.drivetrains[i];
+                        (js, dt_)
+                    };
+                    for (jidx, jsim) in js.iter_mut().enumerate() {
+                        jsim.step(
+                            jidx,
+                            cmd,
+                            self.integration.dt,
+                            self.intake_active[i],
+                            cmd.shoot.is_some(),
+                            cmd.shooter_on,
+                            dt_,
+                            lv_robot,
+                        );
+                    }
+                }
+                // shooter gating: with `driver = "shooter"` joints the flywheel
+                // must be at speed before a shot releases (FlywheelBehaviour
+                // IsAtSpeed). A `shoot` request also spins the wheels up, so
+                // agents can just request shots; the shot fires once fast.
+                let shooter_ready = self
+                    .joints
+                    .get(i)
+                    .map(|js| js.iter().all(|j| j.shooter_at_speed()))
+                    .unwrap_or(true);
                 // mechanism servo (issue #57 spike): retarget the arm's
                 // revolute motor when the agent commands it; target is
                 // clamped to the spec's joint limits
@@ -399,7 +452,7 @@ impl World {
                     self.shot_latched[i] = false;
                 }
                 if let Some(shot) = cmd.shoot {
-                    if self.held[i] > 0 && !self.shot_latched[i] {
+                    if self.held[i] > 0 && !self.shot_latched[i] && shooter_ready {
                         self.shot_latched[i] = true;
                         self.held[i] -= 1;
                         let aim = yaw + shot.turret_yaw;
@@ -415,6 +468,12 @@ impl World {
                             [pos.x, pos.y + shot.launch_height, pos.z],
                             vel,
                         ));
+                        // flywheel ball-contact dip
+                        if let Some(js) = self.joints.get_mut(i) {
+                            for j in js.iter_mut() {
+                                j.ball_dip();
+                            }
+                        }
                     }
                 }
                 let resolved = self.drivetrains[i].resolve(cmd, &kin);
@@ -768,6 +827,7 @@ impl World {
             vision_pose: None,
             mech_angle: self.mech_angle(robot),
             hub_active: self.hub_active_at(robot % self.scores.len(), tick),
+            joints: self.joint_states(robot),
         };
         // noise layer: no-op (and zero RNG draws) when disabled
         let true_pos = frame.position;
@@ -797,6 +857,15 @@ impl World {
             field_half: [self.field.half_x, self.field.half_z],
             scores: self.scores,
         }
+    }
+
+    /// Telemetry for one robot's `[[joint]]` mechanism joints (viz +
+    /// SensorFrame encoder feedback).
+    pub fn joint_states(&self, robot: usize) -> Vec<crate::protocol::JointState> {
+        self.joints
+            .get(robot)
+            .map(|js| js.iter().map(|j| j.state()).collect())
+            .unwrap_or_default()
     }
 
     /// World positions of all live (not captured/scored) pieces, for the

@@ -37,6 +37,8 @@ fn deploy_cmd() -> ActuatorFrame {
         intake_active: false,
         shoot: None,
         mech: Some(MechCommand { joint: 0, target: -0.6 }),
+        joints: None,
+        shooter_on: false,
     }
 }
 
@@ -46,6 +48,7 @@ fn rig() -> (World, usize) {
     let mut specs = chassis::default_specs();
     specs[0].mechs = vec![arm_spec()];
     let table = PieceTable {
+            points: vec![],
         zones: vec![SpawnZone {
             center: [-3.75, 0.0],
             half_extents: [0.12, 0.10],

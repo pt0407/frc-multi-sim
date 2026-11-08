@@ -375,3 +375,54 @@ E1(M4)  — last; consumes everything
    `1 - robot` contact filter (now per-pair in world/), spawn zones.
 3. **#42 field import spike** — GLB → Babylon + trimesh colliders; biggest
    visual jump per effort.
+
+---
+
+## North-star roadmap (2026-11-08)
+
+**Goal:** a rebuildsim.com-class product — browser multiplayer sim with
+rooms/roles — but with *real* physics, real CAD mechanisms, real robot
+code, and a genuine testing/competition platform for FRC teams.
+
+Reference points studied: MoSim (decompiled: component mechanisms,
+flywheel spin/dip, trigger-intake + piece path graph), rebuildsim.com
+(rooms, driver/ref/spectator roles, roster, touch), frc2026sim.com
+(per-robot spec editor cards, strategy/batch sims).
+
+### Pillars (priority order)
+
+1. **Real robot code (WPILib/simHAL bridge)** — run unmodified robot
+   programs (Java/C++/Rust via NT4 or HALSim) against our physics.
+   `src/agents/nt_bridge.rs` + `robot_process.rs` are the scaffold.
+   This is THE feature that makes it a testing tool, not a demo.
+2. **Mechanism realism** — `[[joint]]` system landed (spin/position/
+   steer/wheel, accel-limited, flywheel at-speed gate + ball dip).
+   Next: mechanism colliders so pieces physically interact (grab,
+   carry, launch) — currently joints are kinematic display state.
+3. **Piece lifecycle** — free rigid body -> intake capture -> carried
+   through mechanism -> ballistic release -> score. MoSim's model:
+   trigger volume + node-graph carry (NOT physics grasping). Deferred
+   earlier; reopen when mechanism physics lands.
+4.Multiplayer rooms/roles — room codes, driver/referee/spectator,
+   human drivers via gamepad/keyboard -> ActuatorFrame (gamepad.rs
+   exists). 6 robots already simulated; needs per-robot human input
+   routing + lobby UI.
+5. **Spec/field editors** — teams edit archetype params (mass, joints,
+   rates) and fuel layout (`games/fuel.toml` `[[point]]` exact spawn
+   now supported; editor UI TBD). frc2026sim-style parameter cards.
+6. **Roster** — real team CADs (Spectrum exports) per archetype;
+   2910 done, others pending exports.
+7. **Match realism** — authoritative phases/hub shifts (landed),
+   accurate auto, foul/rule enforcement, climb scoring (PENDING).
+8. **Replay/analysis** — deterministic replay landed; add scrubber UI,
+   per-robot telemetry, shot tracing.
+
+### Already landed this arc
+
+- Exact MoSim fuel layout: 503 `[[point]]` spawns (407 midfield hex
+  grid + depot/outpost stashes), `docs/mosim-physics.md` constants
+- MoSim motor presets + FlywheelBehaviour model in `joint.rs`
+  (asymmetric spin, 8% ball dip, at-speed gate)
+- MoSim spawn points (x=±4.642, z=±1.517)
+- Field GLB simplified 3.8M->2.3M verts; draw calls ~28k->~120
+- ACES lighting + fill light

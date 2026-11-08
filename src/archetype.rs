@@ -40,6 +40,13 @@ pub struct Archetype {
     /// authoritative on `mass`/`half_extents`.
     #[serde(default)]
     pub model: Option<ModelSpec>,
+    /// kinematic mechanism joints (MoSim-style): 1-DOF states simulated
+    /// server-side with motor models and streamed to the viz, which binds
+    /// them to named CAD subtrees. `[mech]` stays for physical rigid-body
+    /// joints; `[[joint]]` covers everything else (rollers, flywheel,
+    /// swerve steer/wheel) without spawning physics bodies.
+    #[serde(default, rename = "joint")]
+    pub joints: Vec<JointSpec>,
 }
 
 fn default_drivetrain() -> String {
@@ -161,8 +168,132 @@ pub struct MechSpec {
     pub motor_max_force: f32,
 }
 
+/// Mechanism joint mode — how the joint's state evolves.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum JointMode {
+    /// continuous rotation about an axle; angle accumulates, velocity is
+    /// servoed to the driver target (rad/s). Rollers, flywheel, drum.
+    Spin,
+    /// position servo: angle tracks a commanded target (rad) with
+    /// accel/velocity limits. Arms that aren't physical `[mech]`s,
+    /// hood angles, elevators (revolute form).
+    Position,
+    /// per-module steering yaw: one channel per drivetrain module,
+    /// servoed toward that module's commanded steer angle.
+    Steer,
+    /// per-module wheel spin: one channel per module, angle integrated
+    /// from chassis speed projected on the steer direction / wheel radius.
+    Wheel,
+}
+
+/// Who supplies a spin/position joint's target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum JointDriver {
+    /// agent commands via `ActuatorFrame::joints`
+    Command,
+    /// spins at `max_vel` while the robot's intake is active
+    Intake,
+    /// spins up while a shot is requested or `shooter_on` is set;
+    /// shots are gated on reaching speed (FlywheelBehaviour-style)
+    Shooter,
+}
+
+/// Kinematic mechanism joint spec — the data-driven equivalent of
+/// MoSim's roller/flywheel/turret MonoBehaviours. The `mv` regex selects
+/// the CAD subtree(s) to animate; `scope` optionally restricts matches
+/// to descendants of a named ancestor.
+///
+/// ```toml
+/// [[joint]]
+/// name = "shooter"
+/// mode = "spin"
+/// driver = "shooter"
+/// mv = '^(Blades|Main Drum.*)$'
+/// scope = "32 - R2 Shooter & Feeder"
+/// max_vel = 40.0      # rad/s flywheel speed
+/// accel = 60.0        # rad/s^2 spin-up (flywheel spin-up time)
+/// ```
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct JointSpec {
+    /// human-readable label (telemetry)
+    pub name: String,
+    /// regex matched against CAD node names (after "occurrence of"/
+    /// " <n>" stripping) to find the subtree(s) to animate
+    pub mv: String,
+    /// optional ancestor regex — only nodes inside a matching subtree bind
+    #[serde(default)]
+    pub scope: Option<String>,
+    /// joint mode (default "spin")
+    #[serde(default = "jm_spin")]
+    pub mode: JointMode,
+    /// target source for spin/position joints (default "command")
+    #[serde(default = "jd_command")]
+    pub driver: JointDriver,
+    /// rotation axis override in holder/model space; default = auto-detect
+    /// from part bounding-box proportions (axle of the cylinder)
+    #[serde(default)]
+    pub axis: Option<[f32; 3]>,
+    /// pivot override in holder/model space; default = bounds centre of
+    /// the matched meshes
+    #[serde(default)]
+    pub pivot: Option<[f32; 3]>,
+    /// max joint speed, rad/s (spin/steer) — also the position servo's
+    /// max velocity
+    #[serde(default = "jv_default")]
+    pub max_vel: f32,
+    /// accel limit, rad/s^2 — gives mechanisms spin-up/down time like a
+    /// real motor instead of instant velocity
+    #[serde(default = "ja_default")]
+    pub accel: f32,
+    /// position-mode joint limits [min, max], rad
+    #[serde(default)]
+    pub limits: Option<[f32; 2]>,
+    /// wheel-mode rolling radius, m — omega = module_speed / radius
+    #[serde(default)]
+    pub wheel_radius: f32,
+}
+
+fn jm_spin() -> JointMode {
+    JointMode::Spin
+}
+fn jd_command() -> JointDriver {
+    JointDriver::Command
+}
+fn jv_default() -> f32 {
+    20.0
+}
+fn ja_default() -> f32 {
+    40.0
+}
+
 impl Archetype {
+    /// Resolve an `--archetype` argument to a TOML path. Bare names like
+    /// `2910` or `fast-light` map to `archetypes/<name>.toml` (also
+    /// `archetypes/<name>` and `archetypes/<name>.toml` for subdirs like
+    /// `scouted/red-track-m12`); anything that already exists passes
+    /// through unchanged.
+    pub fn resolve(path: &Path) -> std::path::PathBuf {
+        if path.exists() {
+            return path.to_path_buf();
+        }
+        let name = path.to_string_lossy();
+        for cand in [
+            format!("archetypes/{name}.toml"),
+            format!("archetypes/{name}"),
+        ] {
+            let p = std::path::PathBuf::from(cand);
+            if p.exists() {
+                return p;
+            }
+        }
+        path.to_path_buf()
+    }
+
     pub fn load(path: &Path) -> Result<Self> {
+        let resolved = Self::resolve(path);
+        let path = resolved.as_path();
         let text = std::fs::read_to_string(path)
             .with_context(|| format!("reading archetype {}", path.display()))?;
         let mut a: Archetype = toml::from_str(&text)

@@ -33,13 +33,16 @@ fn cmd() -> ActuatorFrame {
         intake_active: false,
         shoot: None,
         mech: None,
+        joints: None,
+        shooter_on: false,
     }
 }
 
 /// A single resting piece ~1.2 m ahead of robot 0's spawn (no hub — used
 /// for intake tests so the piece can't be scored out from under us).
 fn intake_table() -> PieceTable {
-    PieceTable {
+            PieceTable {
+            points: vec![],
         zones: vec![SpawnZone {
             center: [-2.8, 0.0],
             half_extents: [0.01, 0.01],
@@ -51,7 +54,8 @@ fn intake_table() -> PieceTable {
 
 /// A hub well clear of any resting piece (for shot tests).
 fn hub_table() -> PieceTable {
-    PieceTable {
+            PieceTable {
+            points: vec![],
         zones: vec![SpawnZone {
             center: [4.0, 2.0],
             half_extents: [0.01, 0.01],
@@ -100,6 +104,7 @@ fn inactive_intake_does_not_capture() {
     specs[0].intake = Some(intake_spec());
     // piece parked inside the intake region already — but intake is off
     let t = PieceTable {
+            points: vec![],
         zones: vec![SpawnZone {
             center: [-4.0 + 0.6, 0.0],
             half_extents: [0.01, 0.01],
@@ -162,6 +167,7 @@ fn empty_inventory_cannot_shoot() {
 fn piece_run_is_bit_identical() {
     // seeded spawn table + drag/bounce dynamics must replay identically
     let t = PieceTable {
+            points: vec![],
         zones: vec![SpawnZone {
             center: [0.0, 0.0],
             half_extents: [3.0, 1.5],
@@ -189,6 +195,7 @@ fn piece_run_is_bit_identical() {
 #[ignore]
 fn perf_200_pieces_400hz() {
     let t = PieceTable {
+            points: vec![],
         zones: vec![SpawnZone {
             center: [0.0, 0.0],
             half_extents: [6.0, 3.0],
@@ -230,6 +237,7 @@ fn replay_log_roundtrip_with_pieces() {
     let mut specs = chassis::default_specs();
     specs[0].intake = Some(intake_spec());
     let t = PieceTable {
+            points: vec![],
         zones: vec![
             SpawnZone {
                 center: [-2.8, 0.0],

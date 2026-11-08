@@ -16,6 +16,8 @@ fn cmd(force: [f32; 2]) -> ActuatorFrame {
         intake_active: false,
         shoot: None,
         mech: None,
+        joints: None,
+        shooter_on: false,
     }
 }
 
@@ -130,6 +132,7 @@ fn contact_impulse_aggregates_all_other_robots() {
 #[ignore]
 fn perf_six_robots_200_pieces_400hz() {
     let table = PieceTable {
+            points: vec![],
         zones: vec![SpawnZone {
             center: [0.0, 0.0],
             half_extents: [6.0, 3.0],

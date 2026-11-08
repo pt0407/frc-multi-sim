@@ -162,6 +162,21 @@ impl Drivetrain {
         }
     }
 
+    /// number of drive modules (channels for steer/wheel joints)
+    pub fn module_count(&self) -> usize {
+        self.modules.len()
+    }
+
+    /// last commanded steer angle for module `i` (robot frame, rad,
+    /// 0 = +x). `None` for out-of-range or non-steered modules.
+    pub fn steer(&self, i: usize) -> Option<f32> {
+        if matches!(self.profile, DrivetrainProfile::Swerve) {
+            self.last_steer.get(i).copied()
+        } else {
+            None
+        }
+    }
+
     pub fn normal_per_module(&self) -> f32 {
         self.mass * GRAVITY / self.modules.len().max(1) as f32
     }
@@ -390,6 +405,8 @@ mod tests {
             intake_active: false,
             shoot: None,
             mech: None,
+            joints: None,
+            shooter_on: false,
         };
         let out = d.resolve(&cmd, &kin(0.7));
         assert_eq!(out.len(), 1);
@@ -409,6 +426,8 @@ mod tests {
             intake_active: false,
             shoot: None,
             mech: None,
+            joints: None,
+            shooter_on: false,
         };
         let out = d.resolve(&cmd, &kin(0.0));
         assert_eq!(out.len(), 4);
@@ -435,6 +454,8 @@ mod tests {
             intake_active: false,
             shoot: None,
             mech: None,
+            joints: None,
+            shooter_on: false,
         };
         let out = d.resolve(&cmd, &kin(0.0));
         let total: f32 = out
@@ -460,6 +481,8 @@ mod tests {
             intake_active: false,
             shoot: None,
             mech: None,
+            joints: None,
+            shooter_on: false,
         };
         let out = d.resolve(&cmd, &kin(std::f32::consts::FRAC_PI_2));
         for f in &out {

@@ -218,6 +218,7 @@ mod tests {
             vision_pose: None,
             mech_angle: None,
             hub_active: true,
+            joints: Vec::new(),
         }
     }
 

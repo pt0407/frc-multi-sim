@@ -75,6 +75,8 @@ pub async fn run(
                         intake_active: false,
                         shoot: None,
                         mech: None,
+                        joints: None,
+                        shooter_on: false,
                     };
                     // NT topics are polled, not message-oriented: log only
                     // on change so the file reflects logical traffic

@@ -44,7 +44,7 @@ use std::io::{BufWriter, Read, Write};
 use std::path::Path;
 
 const MAGIC: &[u8; 4] = b"FMSL";
-const FORMAT_VERSION: u32 = 4;
+const FORMAT_VERSION: u32 = 5;
 const KIND_CMD: u8 = 1;
 const KIND_STATE: u8 = 2;
 
@@ -182,6 +182,13 @@ impl LogWriter {
                     w.write_all(&h.radius.to_le_bytes())?;
                     w.write_all(&h.entry_height.to_le_bytes())?;
                     w.write_all(&h.alliance.to_le_bytes())?;
+                }
+                // v5: exact spawn points
+                w.write_all(&(t.points.len() as u32).to_le_bytes())?;
+                for p in &t.points {
+                    for v in p.pos {
+                        w.write_all(&v.to_le_bytes())?;
+                    }
                 }
             }
             None => w.write_all(&[0])?,
@@ -389,6 +396,7 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
                         // mechanisms not yet serialized into replay
                         // headers (issue #57 spike follow-up)
                         mechs: Vec::new(),
+                        joints: Vec::new(),
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
@@ -418,7 +426,19 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
                         })
                     })
                     .collect::<Result<Vec<_>>>()?;
-                Some(PieceTable { zones, hubs })
+                let points = if fmt >= 5 {
+                    let np = r_u32(&mut r)? as usize;
+                    (0..np)
+                        .map(|_| {
+                            Ok(crate::world::pieces::PointSpawn {
+                                pos: r_f32s(&mut r)?,
+                            })
+                        })
+                        .collect::<Result<Vec<_>>>()?
+                } else {
+                    Vec::new()
+                };
+                Some(PieceTable { zones, hubs, points })
             } else {
                 None
             }
@@ -555,6 +575,8 @@ fn read_cmd_record(r: &mut impl Read, fmt: u32) -> Result<Record> {
             intake_active,
             shoot,
             mech,
+            joints: None,
+            shooter_on: false,
         })
     } else {
         None

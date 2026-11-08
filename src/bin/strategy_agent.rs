@@ -167,6 +167,7 @@ async fn main() -> Result<()> {
                                     launch_velocity: *launch_velocity, hood_angle: *hood_angle,
                                     turret_yaw: *turret_yaw, launch_height: *launch_height,
                                 }), mech: mech_last,
+                                joints: None, shooter_on: false,
                             };
                             sink.send(Message::Text(
                                 serde_json::to_string(&AgentMsg::Actuator(act)).unwrap().into(),
@@ -181,6 +182,7 @@ async fn main() -> Result<()> {
                     let act = ActuatorFrame {
                         force: [0.0, 0.0], torque: 0.0, modules: None,
                         intake_active: intake_on, shoot: None, mech: Some(m),
+                        joints: None, shooter_on: false,
                     };
                     sink.send(Message::Text(
                         serde_json::to_string(&AgentMsg::Actuator(act)).unwrap().into(),
@@ -202,6 +204,8 @@ async fn main() -> Result<()> {
                             launch_height: p.launch_height,
                         }),
                         mech: mech_last,
+                        joints: None,
+                        shooter_on: false,
                     };
                     sink.send(Message::Text(
                         serde_json::to_string(&AgentMsg::Actuator(act)).unwrap().into(),
@@ -260,6 +264,8 @@ async fn main() -> Result<()> {
                 intake_active: intake_on,
                 shoot: None,
                 mech: mech_last,
+                joints: None,
+                shooter_on: false,
             }))
             .unwrap()
             .into(),

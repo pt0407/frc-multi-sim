@@ -238,22 +238,28 @@ async fn main() -> Result<()> {
     // shared with the control channel (issue #33); the physics loop locks
     // it briefly each step — step() is fully synchronous
     let world = Arc::new(std::sync::Mutex::new(world));
+    // live spec list shared by reset factory + control channel + viz
+    // config — `set_lineup` rewrites it and rebuilds the world
+    let specs_shared = Arc::new(std::sync::Mutex::new(specs.clone()));
     // shared match lifecycle: pause gate + reset factory (issue #33)
     let ctl = std::sync::Arc::new(frc_sim_m0::control::MatchCtl {
         paused: std::sync::atomic::AtomicBool::new(false),
         make_world: std::sync::Mutex::new(Box::new({
-            let specs = specs.clone();
+            let specs_shared = specs_shared.clone();
             let seed = cfg.seed;
             let field = field.clone();
             let piece_table = piece_table.clone();
             let match_cfg = match_cfg;
             move || {
+                let specs = specs_shared.lock().unwrap().clone();
                 let mut w = World::with_config(&specs, seed, field.clone(), &piece_table);
                 w.match_clock = frc_sim_m0::r#match::MatchClock::new(match_cfg);
                 w.apply_preload();
                 w
             }
         })),
+        specs: specs_shared.clone(),
+        defaults: specs.clone(),
     });
 
     // optional event log: header first, then per-tick records in the loop
@@ -344,7 +350,7 @@ async fn main() -> Result<()> {
         sensor_tx.clone(),
         world_tx.clone(),
         field.clone(),
-        specs.clone(),
+        specs_shared.clone(),
     ));
 
     // AdvantageScope-compatible NT4 debug publisher (issue #22)
@@ -451,9 +457,9 @@ async fn main() -> Result<()> {
                             Some(world.obs_world())
                         };
                         let mut frames: Vec<Option<SensorFrame>> =
-                            (0..num_robots).map(|_| None).collect();
+                            (0..world.num_robots()).map(|_| None).collect();
                         let wtick = world.tick();
-                        for r in 0..num_robots {
+                        for r in 0..world.num_robots() {
                             let frame = world.sensor_frame(r, wtick);
                             if let Some(w) = log.as_mut() {
                                 let _ = w.record(&Record::State {
@@ -472,7 +478,7 @@ async fn main() -> Result<()> {
                         // command + experience row (deterministic, issue #12)
                         if let Some(ow) = &obs_world {
                             for agent in policy_agents.iter_mut() {
-                                if let Some(frame) = &frames[agent.robot] {
+                                if let Some(Some(frame)) = frames.get(agent.robot) {
                                     let (cmd, exp) = agent.tick(frame, ow);
                                     commands.set(agent.robot, cmd);
                                     if let Some(l) = exp_log.as_mut() {
@@ -514,6 +520,7 @@ async fn main() -> Result<()> {
                             intake_active: (0..world.num_robots())
                                 .map(|r| world.intake_active(r))
                                 .collect(),
+                            robot_count: world.num_robots(),
                         });
                         }
                     }
