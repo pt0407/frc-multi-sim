@@ -256,6 +256,10 @@ pub enum JointDriver {
     /// spins up while a shot is requested or `shooter_on` is set;
     /// shots are gated on reaching speed (FlywheelBehaviour-style)
     Shooter,
+    /// position joint tracking `ShotCommand::turret_yaw` with accel/vel
+    /// limits — the physical turret. Launch aim uses the joint's actual
+    /// angle, not the raw command, so turret slew lag is real.
+    Turret,
 }
 
 /// Kinematic mechanism joint spec — the data-driven equivalent of
@@ -331,6 +335,12 @@ pub struct JointSpec {
     /// the agent's declared launch_velocity magnitude
     #[serde(default)]
     pub launch_radius: Option<f32>,
+    /// muzzle position in chassis frame [x,y,z] on a `driver = "shooter"`
+    /// joint: pieces launch from this point (yaw-rotated) instead of the
+    /// chassis center + `launch_height`. Real shooters sit out on the
+    /// mechanism, not at the chassis CoM.
+    #[serde(default)]
+    pub muzzle_pos: Option<[f32; 3]>,
 }
 
 fn jm_spin() -> JointMode {

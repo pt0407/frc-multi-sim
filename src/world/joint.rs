@@ -100,6 +100,8 @@ impl JointSim {
                             };
                         }
                     }
+                    // turret is a position-mode driver; meaningless on spin
+                    JointDriver::Turret => {}
                 }
                 // MoSim FlywheelBehaviour: asymmetric spin — spools down
                 // ~2x faster than it spools up (1.2s up / 0.6s down)
@@ -112,6 +114,26 @@ impl JointSim {
                 self.pos[0] += self.vel[0] * dt;
             }
             JointMode::Position => {
+                // turret driver: track the commanded aim angle; hold the
+                // last angle when no shot is requested
+                if spec.driver == JointDriver::Turret {
+                    let mut target = cmd
+                        .shoot
+                        .map(|s| s.turret_yaw)
+                        .unwrap_or(self.pos[0]);
+                    if let Some(l) = spec.limits {
+                        target = target.clamp(l[0], l[1]);
+                    }
+                    let desired =
+                        ((target - self.pos[0]) * 6.0).clamp(-spec.max_vel, spec.max_vel);
+                    self.vel[0] += (desired - self.vel[0]).clamp(-dv, dv);
+                    self.pos[0] = (self.pos[0] + self.vel[0] * dt)
+                        .clamp(
+                            spec.limits.map(|l| l[0]).unwrap_or(f32::NEG_INFINITY),
+                            spec.limits.map(|l| l[1]).unwrap_or(f32::INFINITY),
+                        );
+                    return;
+                }
                 // target angle from the agent's position command (radians)
                 let mut target = self.pos[0];
                 if let Some(jc) = cmd
@@ -246,8 +268,9 @@ mod tests {
             wheel_radius: 0.0,
             roller_pos: None,
             roller_radius: None,
-            on_arm: false,
             launch_radius: None,
+            muzzle_pos: None,
+            on_arm: false,
         }
     }
 
@@ -305,6 +328,39 @@ mod tests {
             j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0]);
         }
         assert!(j.shooter_at_speed(), "vel={}", j.vel[0]);
+    }
+
+    #[test]
+    fn turret_tracks_aim_with_slew_lag() {
+        let mut spec = spin_spec(JointDriver::Turret);
+        spec.mode = JointMode::Position;
+        spec.max_vel = 3.0;
+        spec.accel = 6.0;
+        let mut j = JointSim::new(spec, 4);
+        let dt = Drivetrain::swerve(60.0, 0.4);
+        let mut c = cmd();
+        c.shoot = Some(crate::protocol::ShotCommand {
+            launch_velocity: 10.0,
+            hood_angle: 0.5,
+            turret_yaw: 1.0,
+            launch_height: 0.5,
+        });
+        // early ticks: moving toward 1.0 rad but lagging (real slew)
+        for _ in 0..20 {
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0]);
+        }
+        assert!(j.pos[0] > 0.0 && j.pos[0] < 0.5, "pos={}", j.pos[0]);
+        // settles on target
+        for _ in 0..2000 {
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0]);
+        }
+        assert!((j.pos[0] - 1.0).abs() < 0.05, "pos={}", j.pos[0]);
+        // no shot command: holds last angle
+        c.shoot = None;
+        for _ in 0..400 {
+            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0]);
+        }
+        assert!((j.pos[0] - 1.0).abs() < 0.05, "pos={}", j.pos[0]);
     }
 
     #[test]

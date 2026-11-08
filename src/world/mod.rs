@@ -478,7 +478,18 @@ impl World {
                     if self.held[i] > 0 && !self.shot_latched[i] && shooter_ready {
                         self.shot_latched[i] = true;
                         self.held[i] -= 1;
-                        let aim = yaw + shot.turret_yaw;
+                        // aim: a physical turret joint (driver = "turret")
+                        // tracks the commanded yaw with slew lag — launch
+                        // uses its actual angle, not the raw command
+                        let turret_js = self.joints.get(i).and_then(|js| {
+                            js.iter().find(|j| {
+                                j.spec.driver == crate::archetype::JointDriver::Turret
+                            })
+                        });
+                        let aim = yaw
+                            + turret_js
+                                .map(|j| j.pos[0])
+                                .unwrap_or(shot.turret_yaw);
                         let hv = shot.launch_velocity * shot.hood_angle.cos();
                         let mut vel = [
                             hv * aim.cos() + lv.x,
@@ -506,7 +517,25 @@ impl World {
                                 }
                             }
                         }
-                        let launch_pos = [pos.x, pos.y + shot.launch_height, pos.z];
+                        // launch point: a shooter joint's `muzzle_pos`
+                        // (chassis frame) places the exit on the mechanism;
+                        // otherwise chassis center + launch_height
+                        let launch_pos = self
+                            .joints
+                            .get(i)
+                            .into_iter()
+                            .flatten()
+                            .find(|j| j.spec.driver == crate::archetype::JointDriver::Shooter)
+                            .and_then(|j| j.spec.muzzle_pos)
+                            .map(|m| {
+                                let (s, c) = yaw.sin_cos();
+                                [
+                                    pos.x + m[0] * c + m[2] * s,
+                                    pos.y + m[1],
+                                    pos.z - m[0] * s + m[2] * c,
+                                ]
+                            })
+                            .unwrap_or([pos.x, pos.y + shot.launch_height, pos.z]);
                         // release the physically-carried piece if there is
                         // one; preload inventory (held with no body) still
                         // spawns a fresh ballistic piece

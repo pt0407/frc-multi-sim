@@ -101,6 +101,9 @@ accel = 210.0
 # compression-wheel exit radius (62 mm wheel): launch speed =
 # vel·radius·1.8 — physics-derived, not agent-declared
 launch_radius = 0.031
+# muzzle in chassis frame: shooter exits forward of the CoM at mechanism
+# height — pieces launch from here, not the chassis center
+muzzle_pos = [0.40, 0.55, 0.0]
 
 # vision camera (AprilTag localization): front-mounted, sees perimeter +
 # hub tags for pose estimates. Detected ids stream in SensorFrame.vision_tags;
