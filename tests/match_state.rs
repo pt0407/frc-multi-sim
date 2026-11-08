@@ -137,11 +137,12 @@ fn commands_ignored_while_disabled_and_complete() {
 
 #[test]
 fn scoring_is_attributed_to_phase_and_climb_bonus_lands() {
-    // climb point on robot 0's spawn (x = -4); hub for alliance 0 to shoot at
+    // climb point on robot 0's spawn (station 0: x=-5.1, z=-1.517);
+    // hub for alliance 0 sits dead ahead on the same z lane
     let mut field = FieldSpec::default();
     field.climb_points.push(ClimbPointSpec {
         name: "test-climb".to_string(),
-        pos: [-4.0, 1.5, 0.0],
+        pos: [-5.1, 1.5, -1.517],
     });
     let table = PieceTable {
             points: vec![],
@@ -151,7 +152,7 @@ fn scoring_is_attributed_to_phase_and_climb_bonus_lands() {
             count: 1,
         }],
         hubs: vec![HubZone {
-            center: [-2.0, 0.0],
+            center: [-2.0, -1.517],
             radius: 0.8,
             entry_height: 1.0,
             alliance: 0,
@@ -172,13 +173,13 @@ fn scoring_is_attributed_to_phase_and_climb_bonus_lands() {
     let mut w = World::with_config(&chassis::default_specs(), SEED, field, &table);
     w.match_clock = MatchClock::new(cfg);
 
-    // robot 0 lobs one held piece into its hub (same profile as the
-    // game_pieces shot test — it scores within ~2 s = well inside auto)
+    // robot 0 lobs one held piece into its hub from the spawn station —
+    // flat fast shot drops through the low (1.0 m) entry plane ~3 m out
     w.held[0] = 1;
     let mut shot = cmd();
     shot.shoot = Some(ShotCommand {
-        launch_velocity: 4.0,
-        hood_angle: 0.9,
+        launch_velocity: 9.0,
+        hood_angle: 0.15,
         turret_yaw: 0.0,
         launch_height: 0.6,
     });

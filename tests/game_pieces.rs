@@ -271,14 +271,25 @@ fn replay_log_roundtrip_with_pieces() {
     let mut w = World::with_config(&specs, SEED, FieldSpec::default(), &t);
     let mut records = Vec::new();
     let mut last: Option<ActuatorFrame> = None;
+    let mut held_ticks = 0u32;
     for tick in 0..1600u64 {
         let mut c = cmd();
-        c.force = [600.0, 0.0];
+        // drive into the pile, then brake once carrying so the shot isn't
+        // killed by chassis velocity (realistic: you can't shoot on the run)
+        c.force = if w.held[0] > 0 { [-1200.0, 0.0] } else { [600.0, 0.0] };
         c.intake_active = true;
         if w.held[0] > 0 {
+            held_ticks += 1;
+        } else {
+            held_ticks = 0;
+        }
+        // fire soon after capture while still driving +x: the fixture hub
+        // entry plane is low (1.0 m) so a flat fast shot drops through the
+        // mouth — chassis velocity adds realistic range
+        if held_ticks > 10 {
             c.shoot = Some(ShotCommand {
                 launch_velocity: 6.0,
-                hood_angle: 0.9,
+                hood_angle: 0.15,
                 turret_yaw: 0.0,
                 launch_height: 0.6,
             });
