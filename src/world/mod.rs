@@ -493,7 +493,9 @@ impl World {
                     // flywheel RPM + hood angle (MoSim RebuiltInterpolation)
                     let shot_preset = joint::resolve_shot_preset(
                         self.joints.get(i).map(Vec::as_slice).unwrap_or(&[]),
-                        self.nearest_hub_dist([pos.x, pos.y, pos.z]),
+                        self.scoring_hub_dist(i % self.scores.len(), [
+                            pos.x, pos.y, pos.z,
+                        ]),
                     );
                     // split borrows: joints mutate, drivetrain reads
                     let (js, dt_) = {
@@ -522,7 +524,13 @@ impl World {
                 let shooter_ready = self
                     .joints
                     .get(i)
-                    .map(|js| js.iter().all(|j| j.shooter_at_speed()))
+                    .map(|js| {
+                        js.iter().all(|j| {
+                            j.shooter_at_speed()
+                                && j.hood_at_target()
+                                && j.turret_at_target()
+                        })
+                    })
                     .unwrap_or(true);
                 // mechanism servo (issue #57 spike): retarget the arm's
                 // revolute motor when the agent commands it; target is
@@ -1438,19 +1446,24 @@ impl World {
         Some(Self::roller_anchor(rp, js.spec.on_arm, cpos, cyaw, arm))
     }
 
-    /// 3D distance to the nearest hub entry point — the range input for
-    /// distance-keyed `shot_table`s (MoSim interpolates flywheel RPM and
-    /// hood angle by distance to the selected aim node).
-    fn nearest_hub_dist(&self, pos: [f32; 3]) -> Option<f32> {
+    /// 3D distance to the robot's *own-alliance* hub entry point — the
+    /// range input for distance-keyed `shot_table`s. MoSim interpolates
+    /// by distance to the selected aim node; our scoring target is the
+    /// alliance hub (pass nodes aren't modeled yet). Falls back to the
+    /// nearest hub on fields without per-alliance hubs.
+    fn scoring_hub_dist(&self, alliance: usize, pos: [f32; 3]) -> Option<f32> {
+        let dist = |h: &HubZone| {
+            let dx = pos[0] - h.center[0];
+            let dz = pos[2] - h.center[1];
+            let dy = pos[1] - h.entry_height;
+            (dx * dx + dy * dy + dz * dz).sqrt()
+        };
         self.hubs
             .iter()
-            .map(|h| {
-                let dx = pos[0] - h.center[0];
-                let dz = pos[2] - h.center[1];
-                let dy = pos[1] - h.entry_height;
-                (dx * dx + dy * dy + dz * dz).sqrt()
-            })
+            .filter(|h| h.alliance as usize == alliance)
+            .map(dist)
             .reduce(f32::min)
+            .or_else(|| self.hubs.iter().map(dist).reduce(f32::min))
     }
 
     /// World launch position for robot `i`'s shot: the shooter joint's

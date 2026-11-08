@@ -39,6 +39,9 @@ pub struct JointSim {
     /// last commanded spin target (rad/s) — `shooter_at_speed` compares
     /// against this so distance-keyed shot tables scale the tolerance
     speed_target: f32,
+    /// last position-joint target (rad) — `hood_at_target`/
+    /// `turret_at_target` compare the actual angle against it
+    pos_target: f32,
 }
 
 impl JointSim {
@@ -54,6 +57,7 @@ impl JointSim {
             pos: vec![0.0; n],
             vel: vec![0.0; n],
             speed_target,
+            pos_target: 0.0,
         }
     }
 
@@ -164,6 +168,7 @@ impl JointSim {
                     if let Some(l) = spec.limits {
                         target = target.clamp(l[0], l[1]);
                     }
+                    self.pos_target = target;
                     let desired =
                         ((target - self.pos[0]) * 6.0).clamp(-spec.max_vel, spec.max_vel);
                     self.vel[0] += (desired - self.vel[0]).clamp(-dv, dv);
@@ -264,6 +269,25 @@ impl JointSim {
         }
         let t = self.speed_target.abs();
         self.vel.iter().all(|v| v.abs() >= t * 0.8)
+    }
+
+    /// Hood settled on its target angle? (MoSim `hoodAngleLockTolerance`
+    /// = 0.1 rad) — a real robot can't release fuel into a moving hood,
+    /// so shot release gates on this like it gates on flywheel speed.
+    pub fn hood_at_target(&self) -> bool {
+        if self.spec.driver != JointDriver::Hood {
+            return true;
+        }
+        (self.pos[0] - self.pos_target).abs() <= 0.1
+    }
+
+    /// Turret settled on the commanded aim? (MoSim
+    /// `turretErrorTolerance` ≈ 2° = 0.035 rad) — same release gate.
+    pub fn turret_at_target(&self) -> bool {
+        if self.spec.driver != JointDriver::Turret {
+            return true;
+        }
+        (self.pos[0] - self.pos_target).abs() <= 0.035
     }
 
     /// Ball-contact dip (MoSim FlywheelBehaviour): each launched piece
@@ -550,5 +574,44 @@ mod tests {
             "hood should settle at table angle 0.6, got {}",
             j.pos[0]
         );
+    }
+
+    #[test]
+    fn hood_and_turret_gate_release_until_settled() {
+        let dt = Drivetrain::swerve(60.0, 0.4);
+        let mut c = cmd();
+        c.shoot = Some(crate::protocol::ShotCommand {
+            launch_velocity: 10.0,
+            hood_angle: 0.6,
+            turret_yaw: 0.5,
+            launch_height: 0.5,
+        });
+        // hood joint: far from target right after the command lands
+        let mut hspec = spin_spec(JointDriver::Hood);
+        hspec.mode = JointMode::Position;
+        hspec.max_vel = 2.0; // slow slew so the gate is observable
+        hspec.accel = 4.0;
+        let mut hood = JointSim::new(hspec, 4);
+        hood.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
+        assert!(!hood.hood_at_target(), "hood still slewing");
+        for _ in 0..400 {
+            hood.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
+        }
+        assert!(hood.hood_at_target(), "hood settled, pos={}", hood.pos[0]);
+        // turret joint: same gate at the tighter 2° tolerance
+        let mut tspec = spin_spec(JointDriver::Turret);
+        tspec.mode = JointMode::Position;
+        tspec.max_vel = 2.0;
+        tspec.accel = 4.0;
+        let mut turret = JointSim::new(tspec, 4);
+        turret.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
+        assert!(!turret.turret_at_target(), "turret still slewing");
+        for _ in 0..400 {
+            turret.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
+        }
+        assert!(turret.turret_at_target(), "turret settled, pos={}", turret.pos[0]);
+        // non-positional drivers never gate
+        let intake = JointSim::new(spin_spec(JointDriver::Intake), 4);
+        assert!(intake.hood_at_target() && intake.turret_at_target());
     }
 }
