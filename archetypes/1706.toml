@@ -1,0 +1,141 @@
+name = "1706-ratchetrockers"
+# Team 1706 "RatchetRockers" — mechanism constants ported from the MoSim
+# decompile (docs/mosim-robots.md). E-chain assisted intake/hopper/
+# climber with dual turrets in MoSim; we model the primary turret +
+# hopper + climber (dual-turret independent aim isn't supported yet —
+# both MoSim turrets would track the same turret_yaw here).
+# Placeholder kitbot visuals until real 1706 CAD is supplied.
+mass = 62.0
+half_extents = [0.52, 0.32, 0.62]
+max_force = 1200.0
+drivetrain = "swerve"
+
+[model]
+# TODO: replace with 1706's real CAD export
+url = "/robot-assets/kitbot-2026.glb"
+scale = 0.72
+offset = [-0.30, 0.0, 0.05]
+rotation_deg = [90.0, 0.0, -90.0]
+
+[sensors]
+preset = "competition"
+
+[intake]
+x_min = -0.70
+x_max = 0.35
+z_min = -0.50
+z_max = 0.50
+y_min = -0.55
+y_max = 0.0
+capacity = 12
+
+# intake arm — MoSim intakeJoint + intakeWobbleDelay=1.25s agitation
+[[mech]]
+pivot = [0.30, 0.30, 0.0]
+half_extents = [0.25, 0.03, 0.14]
+mass = 3.5
+stow_angle = 1.2
+limits = [-0.5, 1.3]
+motor_stiffness = 300.0
+motor_damping = 30.0
+motor_max_force = 400.0
+
+# primary turret — MoSim AZ tolerance 15deg / NZ 25deg (looser than
+# Hightide's 2deg); our gate stays at the tighter 2deg until per-archetype
+# tolerances are configurable
+[[joint]]
+name = "turret"
+mode = "position"
+driver = "turret"
+mv = 'turret|Turret'
+max_vel = 5.0    # rad/s — E-chain assisted, slower than direct drive
+accel = 12.0
+limits = [-3.2, 3.2]
+
+# shooter — MoSim manualShotRpm=300 is roller-ratio scaled; effective
+# flywheel ~60 rad/s with launch_radius doing the exit-speed math
+[[joint]]
+name = "shooter"
+mode = "spin"
+driver = "shooter"
+mv = 'shooter|Shooter|feeder|Feeder'
+max_vel = 60.0
+accel = 60.0     # slower spin-up — geared down like the real bot
+launch_radius = 0.045   # larger effective exit radius (geared shooter)
+muzzle_pos = [0.40, 0.55, 0.0]
+feed_path = [[0.34, 0.50, 0.0]]
+shot_table = [
+  { distance = 1.5, flywheel = 0.40, hood = 0.18 },
+  { distance = 3.0, flywheel = 0.60, hood = 0.30 },
+  { distance = 4.5, flywheel = 0.80, hood = 0.44 },
+  { distance = 6.0, flywheel = 0.95, hood = 0.55 },
+  { distance = 8.0, flywheel = 1.00, hood = 0.61 },
+]
+
+# hood — MoSim hoodAtTargetTolerance 0.3 AZ / 0.8 NZ rad; range 0-35deg
+[[joint]]
+name = "hood"
+mode = "position"
+driver = "hood"
+mv = 'hood|Hood'
+max_vel = 4.0    # hoodRollerReduction=0.5 — slower hood motor
+accel = 10.0
+limits = [0.0, 0.61]
+
+# hopper: MoSim hopperJoint positions the storage chamber — agent command
+[[joint]]
+name = "hopper"
+mode = "position"
+driver = "command"
+mv = 'hopper|Hopper'
+max_vel = 3.0
+accel = 8.0
+limits = [-0.4, 0.4]
+
+# climber: MoSim climber joint for the endgame climb — agent command
+[[joint]]
+name = "climber"
+mode = "position"
+driver = "command"
+mv = 'climber|Climber'
+max_vel = 2.0
+accel = 6.0
+limits = [0.0, 1.5]
+
+# intake rollers — MoSim intakeRpm=2000
+[[joint]]
+name = "intake-rollers"
+mode = "spin"
+driver = "intake"
+mv = 'intake|Intake'
+max_vel = 40.0
+accel = 40.0
+roller_pos = [0.45, 0.15, 0.0]
+roller_radius = 0.30
+roller_axis = [0.0, 0.0, -1.0]
+
+# left/right indexer + feeder rollers (MoSim dual sets) — both tracked by
+# one joint each side isn't supported; single representative joints
+[[joint]]
+name = "indexer-left"
+mode = "spin"
+driver = "intake"
+mv = 'indexer|Indexer'
+max_vel = 210.0
+accel = 120.0
+
+[[joint]]
+name = "feeder-right"
+mode = "spin"
+driver = "intake"
+mv = 'feeder|Feeder'
+max_vel = 210.0
+accel = 120.0
+
+# vision camera
+[camera]
+pos = [0.30, 0.45, 0.0]
+yaw = 0.0
+hfov_deg = 80.0
+vfov_deg = 60.0
+max_range = 10.0
