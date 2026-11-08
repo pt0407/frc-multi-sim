@@ -1,5 +1,7 @@
-name = "2910-hightide"
-# real 2910 robot GLB — Z-up Onshape export, x90 to upright
+name = "2910-reblitz"
+# Team 2910 "ReBlitz" (MoSim's name for the 2910 bot, v2) — mechanism
+# constants ported from the MoSim decompile (docs/mosim-robots.md).
+# Real 2910 robot GLB — Z-up Onshape export, x90 to upright
 mass = 60.0
 half_extents = [0.53, 0.315, 0.64]
 max_force = 1200.0
@@ -33,6 +35,10 @@ capacity = 12
 # intake arm — pivots at the front bumper, deploys down to scoop fuel.
 # Deployed (<0.5 rad) is required for intake captures; the arm tip also
 # becomes the intake origin so it reaches ground-level pieces.
+# MoSim intakeBringupDelay=0.15s deploy lag isn't modeled (servo is
+# immediate); scoringAimTolerance=4deg / passingAimTolerance=15deg /
+# hubNoShootingDist=1.5m / passLandingX=5.91 are agent-side constants —
+# implement in robot code or policy, not the archetype.
 [[mech]]
 pivot = [0.33, 0.30, 0.0]
 half_extents = [0.25, 0.03, 0.14]
@@ -89,6 +95,35 @@ roller_radius = 0.30
 # (MoSim InteractionRoller) — reverse spin would eject pieces
 roller_axis = [0.0, 0.0, -1.0]
 
+# hopper: MoSim HopperLockPositionMeters=-0.299 / HopperTargetInches=-12
+# — the storage chamber is a physical joint, agent-commanded. CAN-range
+# fullness debounce (0.25s) isn't modeled; [intake] capacity covers it.
+[[joint]]
+name = "hopper"
+mode = "position"
+driver = "command"
+mv = 'Hopper|hopper'
+max_vel = 3.0
+accel = 8.0
+limits = [-0.35, 0.35]
+
+# floor + uptake rollers: MoSim floorRpm=uptakeRpm=2000, intake-driven
+[[joint]]
+name = "floor-rollers"
+mode = "spin"
+driver = "intake"
+mv = 'Floor Roller|floor'
+max_vel = 40.0
+accel = 60.0
+
+[[joint]]
+name = "uptake-rollers"
+mode = "spin"
+driver = "intake"
+mv = 'Uptake|uptake'
+max_vel = 40.0
+accel = 60.0
+
 # shooter: blades, drum, compliant wheels, hood/feed rollers — one joint,
 # every matched subtree shares the flywheel angle. Spins up on shoot
 # requests or shooter_on, shots gate on reaching speed.
@@ -124,15 +159,16 @@ shot_table = [
 
 # hood: the pivoting deflector (32-17 Hood Assembly) is a physical
 # position joint tracking the shot's hood_angle — launch elevation uses
-# its actual angle, so hood slew lag changes the shot for real
+# its actual angle, so hood slew lag changes the shot for real.
+# MoSim hoodRpmReduction=1.5 -> derated slew/accel vs the turret bots.
 [[joint]]
 name = "hood"
 mode = "position"
 driver = "hood"
 mv = 'Hood Assembly'
 scope = '32 - R2 Shooter'
-max_vel = 5.0    # rad/s hood slew
-accel = 15.0
+max_vel = 3.3    # 5.0 / 1.5 hoodRpmReduction
+accel = 10.0    # 15.0 / 1.5
 limits = [0.0, 1.2]
 
 # vision camera (AprilTag localization): front-mounted, sees perimeter +
