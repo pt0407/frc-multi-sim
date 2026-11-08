@@ -216,6 +216,7 @@ mod tests {
             match_state: crate::r#match::MatchPhase::Teleop,
             match_time: 0.0,
             vision_pose: None,
+            vision_tags: Vec::new(),
             mech_angle: None,
             hub_active: true,
             joints: Vec::new(),

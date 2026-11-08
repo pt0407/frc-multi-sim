@@ -221,7 +221,20 @@ impl SensorNoise {
     /// Filter a ground-truth frame in place: Gaussian noise + per-boot bias
     /// on pose/velocity/gyro, plus the delayed/dropout vision pose estimate.
     /// `true_pos` is the unfiltered position used to feed the latency queue.
-    pub fn apply(&mut self, rng: &mut SimRng, frame: &mut SensorFrame, true_pos: [f32; 3]) {
+    ///
+    /// `vision_gate`: `None` = legacy ungated vision (robots without a
+    /// `[camera]` spec — noise distance is proxied by range from field
+    /// center). `Some(d)` = AprilTag-gated: the estimate only publishes
+    /// while a tag is visible, and noise scales with distance to the
+    /// nearest tag like a real PnP solve. `Some(INFINITY)` (camera sees no
+    /// tags) publishes nothing and keeps the stale estimate.
+    pub fn apply(
+        &mut self,
+        rng: &mut SimRng,
+        frame: &mut SensorFrame,
+        true_pos: [f32; 3],
+        vision_gate: Option<f32>,
+    ) {
         if !self.cfg.enabled {
             return;
         }
@@ -230,7 +243,11 @@ impl SensorNoise {
             frame.linvel[i] += self.vel_bias[i] + gauss(rng, self.cfg.vel_std);
             frame.angvel[i] += self.gyro_bias[i] + gauss(rng, self.cfg.gyro_std);
         }
-        self.update_vision(rng, frame.tick, true_pos);
+        match vision_gate {
+            Some(d) if d.is_finite() => self.update_vision(rng, frame.tick, true_pos, Some(d)),
+            Some(_) => {} // no tags in view: pipeline publishes nothing
+            None => self.update_vision(rng, frame.tick, true_pos, None),
+        }
         frame.vision_pose = self.vision_est;
     }
 
@@ -238,7 +255,13 @@ impl SensorNoise {
     /// truth, refreshed at ~`vision_hz`, with distance-dependent noise and
     /// seeded dropouts (a dropout keeps the previous estimate, like a real
     /// pipeline publishing nothing that frame).
-    fn update_vision(&mut self, rng: &mut SimRng, tick: u64, true_pos: [f32; 3]) {
+    fn update_vision(
+        &mut self,
+        rng: &mut SimRng,
+        tick: u64,
+        true_pos: [f32; 3],
+        tag_dist: Option<f32>,
+    ) {
         let latency_ticks =
             (self.cfg.vision_latency_s * SENSOR_HZ).round().max(0.0) as u64;
         self.vision_queue.push_back((tick, true_pos));
@@ -272,9 +295,10 @@ impl SensorNoise {
             .find(|&&(t, _)| t + latency_ticks <= tick)
             .map(|&(_, p)| p)
             .unwrap_or(true_pos);
-        // distance-dependent noise: proxy tag distance by range from field
-        // center (tags live around the perimeter)
-        let dist = (obs[0] * obs[0] + obs[2] * obs[2]).sqrt();
+        // distance-dependent noise: gated robots use the real nearest-tag
+        // distance (PnP error grows with tag range); ungated legacy uses
+        // range from field center as the tag-distance proxy
+        let dist = tag_dist.unwrap_or_else(|| (obs[0] * obs[0] + obs[2] * obs[2]).sqrt());
         let t = (dist / VISION_FAR_M).clamp(0.0, 1.0);
         let std = self.cfg.vision_std_min + (self.cfg.vision_std_max - self.cfg.vision_std_min) * t;
         self.vision_est = Some([

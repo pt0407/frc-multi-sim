@@ -301,3 +301,93 @@ pos  = [-7.21, 1.83, 0.29]
 [[climb_points]]
 name = "tower-east-top"
 pos  = [7.21, 1.83, -0.29]
+
+# --- AprilTags (vision localization) ----------------------------------------
+# Fiducial markers teams' cameras detect for pose estimation. Layout follows
+# real FRC practice: high perimeter tags at the corners/edge centers plus
+# tags on the hub structures facing midfield. `yaw` is the tag-face normal
+# in the floor plane (0 = +x); a tag is only visible from its front.
+# Team-editable — move/add/remove freely; robot code sees `id` in
+# SensorFrame.vision_tags and `vision_pose` only publishes while a tag is
+# in view.
+
+[[apriltag]]
+id = 0
+pos = [ 7.90, 2.60, -3.80]
+yaw = 2.7   # corner
+
+[[apriltag]]
+id = 1
+pos = [-7.90, 2.60, -3.80]
+yaw = 0.45   # corner
+
+[[apriltag]]
+id = 2
+pos = [ 7.90, 2.60,  3.80]
+yaw = -2.7   # corner
+
+[[apriltag]]
+id = 3
+pos = [-7.90, 2.60,  3.80]
+yaw = -0.45   # corner
+
+[[apriltag]]
+id = 4
+pos = [ 0.00, 2.60, -3.90]
+yaw = 1.5708   # south rail
+
+[[apriltag]]
+id = 5
+pos = [ 0.00, 2.60,  3.90]
+yaw = -1.5708   # north rail
+
+[[apriltag]]
+id = 6
+pos = [ 7.90, 2.60,  0.00]
+yaw = 3.1416   # east end
+
+[[apriltag]]
+id = 7
+pos = [-7.90, 2.60,  0.00]
+yaw = 0.0   # west end
+
+[[apriltag]]
+id = 8
+pos = [-3.49, 2.20, -1.00]
+yaw = 0.0   # west hub -> midfield
+
+[[apriltag]]
+id = 9
+pos = [-3.49, 2.20,  1.00]
+yaw = 0.0   # west hub -> midfield
+
+[[apriltag]]
+id = 10
+pos = [ 3.49, 2.20, -1.00]
+yaw = 3.1416   # east hub -> midfield
+
+[[apriltag]]
+id = 11
+pos = [ 3.49, 2.20,  1.00]
+yaw = 3.1416   # east hub -> midfield
+
+[[apriltag]]
+id = 12
+pos = [-7.50, 1.00, -2.50]
+yaw = 0.0   # west depot
+
+[[apriltag]]
+id = 13
+pos = [-7.50, 1.00,  2.50]
+yaw = 0.0   # west depot
+
+[[apriltag]]
+id = 14
+pos = [ 7.50, 1.00, -2.50]
+yaw = 3.1416   # east depot
+
+[[apriltag]]
+id = 15
+pos = [ 7.50, 1.00,  2.50]
+yaw = 3.1416   # east depot
+

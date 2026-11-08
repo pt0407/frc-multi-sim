@@ -242,6 +242,7 @@ mod tests {
             match_state: MatchPhase::Teleop,
             match_time: 100.0,
             vision_pose: None,
+            vision_tags: Vec::new(),
             mech_angle: None,
             hub_active: true,
             joints: Vec::new(),

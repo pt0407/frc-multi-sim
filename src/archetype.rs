@@ -47,6 +47,11 @@ pub struct Archetype {
     /// swerve steer/wheel) without spawning physics bodies.
     #[serde(default, rename = "joint")]
     pub joints: Vec<JointSpec>,
+    /// optional `[camera]` vision sensor: detects field AprilTags and gates
+    /// the `vision_pose` estimate on real line-of-sight. Absent = legacy
+    /// ungated synthetic vision (when `[sensors]` is enabled).
+    #[serde(default)]
+    pub camera: Option<CameraSpec>,
 }
 
 fn default_drivetrain() -> String {
@@ -88,6 +93,51 @@ pub struct ModelSpec {
 
 fn one() -> f32 {
     1.0
+}
+
+/// Vision camera spec (AprilTag localization). `[camera]` table in the
+/// archetype TOML:
+///
+/// ```toml
+/// [camera]
+/// pos = [0.30, 0.45, 0.0]   # chassis frame, +x fwd, +y up, meters
+/// yaw = 0.0                  # heading offset, radians
+/// hfov_deg = 80.0            # horizontal field of view
+/// vfov_deg = 60.0            # vertical field of view (defaults to hfov)
+/// max_range = 10.0           # meters
+/// ```
+///
+/// A tag is "seen" when it is inside the frustum, within range, on the
+/// tag's front face, and roughly at the camera's height band. Detected
+/// tag ids stream in `SensorFrame.vision_tags`; `vision_pose` only
+/// publishes while at least one tag is visible.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
+pub struct CameraSpec {
+    /// camera position in the chassis frame [x, y, z]
+    #[serde(default = "cam_pos_default")]
+    pub pos: [f32; 3],
+    /// heading offset from chassis forward, radians
+    #[serde(default)]
+    pub yaw: f32,
+    /// horizontal field of view, degrees
+    #[serde(default = "cam_hfov_default")]
+    pub hfov_deg: f32,
+    /// vertical field of view, degrees (defaults to hfov_deg)
+    #[serde(default)]
+    pub vfov_deg: Option<f32>,
+    /// max detection range, meters
+    #[serde(default = "cam_range_default")]
+    pub max_range: f32,
+}
+
+fn cam_pos_default() -> [f32; 3] {
+    [0.0, 0.45, 0.0]
+}
+fn cam_hfov_default() -> f32 {
+    80.0
+}
+fn cam_range_default() -> f32 {
+    10.0
 }
 
 /// Robot-relative active intake region (issue #3, FuelSim `registerIntake`

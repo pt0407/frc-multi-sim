@@ -87,3 +87,13 @@ mv = 'Blades|Main Drum|Compliant Wheel|Thin Aluminum Roller|Hood Roller'
 scope = '32 - R2 Shooter'
 max_vel = 40.0    # rad/s flywheel speed
 accel = 60.0      # rad/s^2 spin-up
+
+# vision camera (AprilTag localization): front-mounted, sees perimeter +
+# hub tags for pose estimates. Detected ids stream in SensorFrame.vision_tags;
+# vision_pose only publishes while a tag is in view.
+[camera]
+pos = [0.30, 0.45, 0.0]
+yaw = 0.0
+hfov_deg = 80.0
+vfov_deg = 60.0
+max_range = 10.0

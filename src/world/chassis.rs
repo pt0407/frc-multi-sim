@@ -43,6 +43,9 @@ pub struct RobotSpec {
     /// kinematic mechanism joints (spin/position/steer/wheel) simulated
     /// server-side and bound to CAD subtrees by the viz client
     pub joints: Vec<JointSpec>,
+    /// vision camera for AprilTag detection (None = no camera: legacy
+    /// ungated vision_pose when sensors are enabled)
+    pub camera: Option<crate::archetype::CameraSpec>,
 }
 
 impl RobotSpec {
@@ -57,6 +60,7 @@ impl RobotSpec {
             model: None,
             mechs: Vec::new(),
             joints: Vec::new(),
+            camera: None,
         }
     }
 
@@ -71,6 +75,7 @@ impl RobotSpec {
             model: a.model.clone(),
             mechs: a.mechs.clone(),
             joints: a.joints.clone(),
+            camera: a.camera,
         }
     }
 }

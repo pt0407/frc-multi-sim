@@ -129,6 +129,36 @@ pub struct ScoringZoneSpec {
     pub max: [f32; 2],
 }
 
+/// AprilTag fiducial marker (real-field localization target). Tags are
+/// detected by robot cameras (`[camera]` in the archetype) to produce the
+/// `vision_pose` estimate — pose estimates only publish while ≥1 tag is in
+/// view, like a real PhotonVision pipeline losing sight of the field.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AprilTagSpec {
+    /// tag id within its family (what robot code sees in detections)
+    pub id: u16,
+    /// tag family (e.g. "36h11"); informational for v1
+    #[serde(default = "default_tag_family")]
+    pub family: String,
+    /// tag center position [x, y, z], meters
+    pub pos: [f32; 3],
+    /// heading of the tag face normal in the floor plane, radians
+    /// (0 = facing +x). The tag is only detectable from its front.
+    #[serde(default)]
+    pub yaw: f32,
+    /// square tag edge length, meters
+    #[serde(default = "default_tag_size")]
+    pub size: f32,
+}
+
+fn default_tag_family() -> String {
+    "36h11".to_string()
+}
+
+fn default_tag_size() -> f32 {
+    0.165
+}
+
 /// Placeholder climb point: a named world-space anchor.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClimbPointSpec {
@@ -158,6 +188,10 @@ pub struct FieldSpec {
     /// placeholder climb points (no colliders)
     #[serde(default)]
     pub climb_points: Vec<ClimbPointSpec>,
+    /// AprilTag fiducial markers for vision localization (no colliders).
+    /// Team-editable like every other field table.
+    #[serde(default, rename = "apriltag")]
+    pub apriltags: Vec<AprilTagSpec>,
     /// Optional URL (served by the web client) of a GLB visual model for
     /// this field. Physics never reads it; it is forwarded to spectators so
     /// the Babylon client renders the real field mesh when the asset is
@@ -223,6 +257,7 @@ impl Default for FieldSpec {
             obstacles: Vec::new(),
             scoring_zones: Vec::new(),
             climb_points: Vec::new(),
+            apriltags: Vec::new(),
             glb_url: None,
             glb: None,
             glb_colliders: None,
@@ -358,6 +393,14 @@ impl FieldSpec {
         }
         for (i, c) in self.climb_points.iter().enumerate() {
             check_pos3(&c.pos, &format!("climb_points[{i}] ({})", c.name))?;
+        }
+        for (i, t) in self.apriltags.iter().enumerate() {
+            check_pos3(&t.pos, &format!("apriltags[{i}] (id {})", t.id))?;
+            check_finite(t.yaw, &format!("apriltags[{i}].yaw"))?;
+            check_finite(t.size, &format!("apriltags[{i}].size"))?;
+            if t.size <= 0.0 {
+                bail!("apriltags[{i}].size must be > 0");
+            }
         }
         Ok(())
     }

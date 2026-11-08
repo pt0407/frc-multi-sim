@@ -73,6 +73,7 @@ pub fn config_msg(field: &FieldSpec, specs: &[RobotSpec]) -> String {
             "obstacles": field.obstacles,
             "scoring_zones": field.scoring_zones,
             "climb_points": field.climb_points,
+            "apriltags": field.apriltags,
             // optional GLB visual model (issue #42); null when the spec
             // doesn't reference one — clients keep primitive geometry
             "glb_url": field.glb_url.clone().or(glb_url),
@@ -108,6 +109,8 @@ pub fn config_msg(field: &FieldSpec, specs: &[RobotSpec]) -> String {
                     // wheel): mv regex + motor params for CAD binding,
                     // state arrives per-tick in the robots[] "joints" field
                     "joints": s.joints,
+                    // vision camera spec (frustum viz + tag detection parity)
+                    "camera": s.camera,
                 })
             })
             .collect::<Vec<_>>(),
@@ -173,6 +176,10 @@ async fn state_collector(
                             "angvel": f.angvel,
                             "contact_impulse": f.contact_impulse,
                             "joints": f.joints,
+                            // vision telemetry: pose estimate + detected
+                            // AprilTag ids (field localization, real tags)
+                            "vision_pose": f.vision_pose,
+                            "vision_tags": f.vision_tags,
                         })
                     })
                     .collect();

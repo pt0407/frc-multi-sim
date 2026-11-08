@@ -42,6 +42,11 @@ pub struct SensorFrame {
     /// compatible: absent in serialized frames it deserializes to `None`.
     #[serde(default)]
     pub vision_pose: Option<[f32; 3]>,
+    /// AprilTag ids currently inside this robot's camera frustum
+    /// (empty without `[camera]` or when no tag is visible). Raw
+    /// detections — independent of the `[sensors]` noise model.
+    #[serde(default)]
+    pub vision_tags: Vec<u16>,
     /// mechanism arm joint angle in radians (issue #57); None when the
     /// robot has no mechanism
     #[serde(default)]

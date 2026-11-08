@@ -8,6 +8,7 @@ pub mod joint;
 pub mod mech;
 pub mod noise;
 pub mod pieces;
+pub mod vision;
 
 pub use crate::archetype::IntakeSpec;
 pub use chassis::{RobotSpec, NUM_ROBOTS, ROBOT_HALF, ROBOT_MASS};
@@ -15,6 +16,7 @@ pub use field::{FieldSpec, FIELD_HALF_X, FIELD_HALF_Z};
 pub use pieces::{HubZone, PieceTable, SpawnZone};
 
 use crate::drivetrain::{rot2, yaw_from_quat, Drivetrain};
+use self::vision::TagView;
 use crate::r#match::{MatchClock, MatchPhase, PhaseScore};
 use crate::rng::SimRng;
 use crate::{ActuatorFrame, SensorFrame};
@@ -83,6 +85,9 @@ pub struct World {
     phase_override: Option<(MatchPhase, u64)>,
     /// per-robot sensor noise/latency models (issue #7); drawn from `rng`
     sensors: Vec<SensorNoise>,
+    /// per-robot vision cameras (`[camera]` archetype spec); `None` = no
+    /// camera, so `vision_pose` stays on the legacy ungated path
+    cameras: Vec<Option<crate::archetype::CameraSpec>>,
     /// per-robot articulated mechanism (issue #57 spike): `Some` only for
     /// specs that opt in via `[mech]`; `None` robots stay single-body
     /// articulated mechanism parts per robot (issue #61)
@@ -156,6 +161,7 @@ impl World {
             match_finished: false,
             phase_override: None,
             sensors: Vec::new(),
+            cameras: Vec::new(),
             mechs: Vec::new(),
             joints: Vec::new(),
         };
@@ -267,6 +273,7 @@ impl World {
             .iter()
             .map(|s| SensorNoise::new(s.sensors, &mut w.rng))
             .collect();
+        w.cameras = specs.iter().map(|s| s.camera).collect();
         w
     }
 
@@ -825,13 +832,27 @@ impl World {
             match_state: self.phase_at_tick(tick),
             match_time: self.time_remaining_at_tick(tick),
             vision_pose: None,
+            vision_tags: Vec::new(),
             mech_angle: self.mech_angle(robot),
             hub_active: self.hub_active_at(robot % self.scores.len(), tick),
             joints: self.joint_states(robot),
         };
+        // AprilTag detection runs on ground truth before the noise layer
+        // (a real camera resolves tags regardless of estimator noise).
+        // Robots without `[camera]` get `None` → legacy ungated vision.
+        let tag_view = self
+            .cameras
+            .get(robot)
+            .and_then(|c| c.as_ref())
+            .map(|cam| vision::detect(cam, &self.field.apriltags, frame.position, frame.rotation));
+        frame.vision_tags = tag_view
+            .as_ref()
+            .map(|v| v.ids.clone())
+            .unwrap_or_default();
         // noise layer: no-op (and zero RNG draws) when disabled
         let true_pos = frame.position;
-        self.sensors[robot].apply(&mut self.rng, &mut frame, true_pos);
+        let vision_gate = tag_view.map(|v| v.nearest_m);
+        self.sensors[robot].apply(&mut self.rng, &mut frame, true_pos, vision_gate);
         frame
     }
 

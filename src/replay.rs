@@ -397,6 +397,7 @@ pub fn read_log(path: &Path) -> Result<(LogHeader, Vec<Record>)> {
                         // headers (issue #57 spike follow-up)
                         mechs: Vec::new(),
                         joints: Vec::new(),
+                        camera: None,
                     })
                 })
                 .collect::<Result<Vec<_>>>()?
