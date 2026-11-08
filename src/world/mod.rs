@@ -28,6 +28,9 @@ pub const PHYSICS_HZ: f32 = 400.0;
 /// shooter joint doesn't set `feed_time`. ~0.15 s matches a real
 /// intake-to-flywheel transit.
 pub const FEED_TIME_DEFAULT: f32 = 0.15;
+/// Seconds an out-of-bounds piece sits flagged before teleporting back
+/// to its return point (MoSim ReturnCounters = 3 s).
+pub const RETURN_DELAY_S: f32 = 3.0;
 pub const AGENT_EVERY: u32 = 8; // 50 Hz agent tick
 
 /// Feed state for a carried piece traveling carry-anchor -> muzzle
@@ -62,6 +65,18 @@ struct HubHeldPiece {
     handle: RigidBodyHandle,
     /// index into `World::hubs`
     hub: usize,
+}
+
+/// Out-of-bounds piece awaiting return to play (MoSim
+/// RebuiltGamePieceController: flag on exit, 3 s counter, then
+/// MovePosition back to the alliance return point).
+#[derive(Debug, Clone, Copy)]
+struct ReturnState {
+    handle: RigidBodyHandle,
+    /// seconds remaining before teleport (MoSim ReturnCounters = 3 s)
+    t: f32,
+    /// world return point
+    point: [f32; 3],
 }
 
 pub struct World {
@@ -99,6 +114,9 @@ pub struct World {
     carried: Vec<CarriedPiece>,
     /// scored pieces held kinematically inside their hub
     hub_held: Vec<HubHeldPiece>,
+    /// out-of-bounds pieces on their 3 s return timer (MoSim return
+    /// points — fuel that leaves the field comes back into play)
+    returning: Vec<ReturnState>,
     /// per-robot held-piece inventory, fed by intake captures and consumed
     /// by shots
     pub held: Vec<u32>,
@@ -197,6 +215,7 @@ impl World {
             pieces: Vec::new(),
             carried: Vec::new(),
             hub_held: Vec::new(),
+            returning: Vec::new(),
             held: vec![0; specs.len()],
             scores: [0; 2],
             hubs: table.hubs.clone(),
@@ -831,6 +850,20 @@ impl World {
             let v = *body.linvel();
             let pos = [t.x, t.y, t.z];
 
+            // out-of-bounds: flag for return to play (MoSim return
+            // points — 3 s counter then teleport back inside)
+            if (pos[0].abs() > FIELD_HALF_X + 0.3
+                || pos[2].abs() > FIELD_HALF_Z + 0.3
+                || pos[1] < -0.1)
+                && !self.returning.iter().any(|r| r.handle == *h)
+            {
+                self.returning.push(ReturnState {
+                    handle: *h,
+                    t: RETURN_DELAY_S,
+                    point: Self::piece_return_point(pos),
+                });
+            }
+
             // intake capture
             let mut captured = false;
             if std::env::var("DEBUG_INTAKE").is_ok() && !robots.iter().all(|r| r.is_none()) {
@@ -885,6 +918,8 @@ impl World {
                             robot: i,
                             feed: None,
                         });
+                        // an intaked piece can't also be returning
+                        self.returning.retain(|r| r.handle != *h);
                         captured = true;
                         break;
                     }
@@ -945,6 +980,37 @@ impl World {
                 // fuel remains visible inside the hub like MoSim
                 continue;
             }
+        }
+
+        // return timers: pieces flagged out-of-bounds teleport back to
+        // their return point after RETURN_DELAY_S (MoSim MovePosition +
+        // inward drift). Pieces captured/scored mid-timer drop out.
+        let mut returned: Vec<ReturnState> = Vec::new();
+        for r in &mut self.returning {
+            if self.carried.iter().any(|c| c.handle == r.handle)
+                || self.hub_held.iter().any(|c| c.handle == r.handle)
+            {
+                r.t = -1.0;
+            } else {
+                r.t -= self.integration.dt;
+            }
+            if r.t <= 0.0 {
+                returned.push(*r);
+            }
+        }
+        for r in returned {
+            self.returning.retain(|x| x.handle != r.handle);
+            let body = &mut self.bodies[r.handle];
+            body.set_translation(
+                vector![r.point[0], r.point[1], r.point[2]],
+                true,
+            );
+            body.set_linvel(vector![0.0, 0.0, 0.0], true);
+            body.set_angvel(vector![0.0, 0.0, 0.0], true);
+            // drift back toward midfield so it re-enters play
+            let (dx, dz) = (-r.point[0], -r.point[2]);
+            let d = (dx * dx + dz * dz).sqrt().max(1e-3);
+            body.set_linvel(vector![dx / d * 0.8, 0.0, dz / d * 0.8], true);
         }
     }
 
@@ -1216,6 +1282,14 @@ impl World {
             }
         }
         vel
+    }
+
+    /// Return point for an out-of-bounds piece: backfield corner on the
+    /// same alliance side it exited, inside the walls (MoSim
+    /// ReturnPoints — elevated spawn, then drifts back to midfield).
+    fn piece_return_point(pos: [f32; 3]) -> [f32; 3] {
+        let sx = if pos[0] < 0.0 { -1.0 } else { 1.0 };
+        [sx * 7.0, 0.4, -sx * 3.5]
     }
 
     /// Resolve a roller anchor to world coords. `arm` is the robot's

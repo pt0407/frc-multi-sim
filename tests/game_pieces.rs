@@ -163,6 +163,33 @@ fn carried_piece_feeds_to_muzzle_before_launch() {
     );
 }
 
+/// MoSim return points: a piece outside the field bounds is flagged,
+/// sits 3 s, then teleports back inside on its alliance side.
+#[test]
+fn out_of_bounds_piece_returns_to_play() {
+    // piece parked just beyond the east wall (outside FIELD_HALF_X)
+    let t = PieceTable {
+            points: vec![],
+        zones: vec![SpawnZone {
+            center: [8.9, 0.0],
+            half_extents: [0.01, 0.01],
+            count: 1,
+        }],
+        hubs: vec![],
+    };
+    let specs = chassis::default_specs();
+    let mut w = World::with_config(&specs, SEED, FieldSpec::default(), &t);
+    // settle, then wait out the 3 s return counter
+    for _ in 0..1400 {
+        w.step(&[None, None]);
+    }
+    let p = w.piece_positions()[0];
+    assert!(
+        p[0].abs() < 8.0 && p[2].abs() < 3.9,
+        "piece should be back inside the field, got {p:?}"
+    );
+}
+
 #[test]
 fn inactive_intake_does_not_capture() {
     let mut specs = chassis::default_specs();
