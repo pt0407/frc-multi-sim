@@ -341,6 +341,11 @@ pub struct JointSpec {
     /// mechanism, not at the chassis CoM.
     #[serde(default)]
     pub muzzle_pos: Option<[f32; 3]>,
+    /// feed time, s: how long a carried piece takes to travel from the
+    /// carry anchor to the muzzle on `driver = "shooter"` joints
+    /// (default 0.15). 0 = instant release at the muzzle.
+    #[serde(default)]
+    pub feed_time: Option<f32>,
 }
 
 fn jm_spin() -> JointMode {

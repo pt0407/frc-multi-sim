@@ -149,6 +149,7 @@ fn arm_roller_joint() -> JointSpec {
         roller_radius: Some(0.3),
         launch_radius: None,
         muzzle_pos: None,
+        feed_time: None,
         on_arm: true,
     }
 }

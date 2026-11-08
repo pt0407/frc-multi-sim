@@ -104,6 +104,65 @@ fn intake_region_captures_piece() {
     assert_eq!(w.sensor_frame(0, 0).pieces_held, 1);
 }
 
+/// Feed path: a carried piece must travel carry-anchor -> muzzle over
+/// `feed_time` before launching ballistically — not teleport on shot.
+#[test]
+fn carried_piece_feeds_to_muzzle_before_launch() {
+    let mut specs = chassis::default_specs();
+    specs[0].spawn = [-4.0, specs[0].spawn[1], 0.0];
+    specs[0].intake = Some(intake_spec());
+    // piece parked inside the intake mouth: captured without driving
+    let t = PieceTable {
+            points: vec![],
+        zones: vec![SpawnZone {
+            center: [-3.4, 0.0],
+            half_extents: [0.01, 0.01],
+            count: 1,
+        }],
+        hubs: vec![],
+    };
+    let mut w = World::with_config(&specs, SEED, FieldSpec::default(), &t);
+    let mut intake_on = cmd();
+    intake_on.intake_active = true;
+    for _ in 0..40 {
+        w.step(&[Some(intake_on.clone()), None]);
+    }
+    assert_eq!(w.held[0], 1, "piece should be captured");
+
+    // one shot press commits the piece to the feed
+    let mut shot = cmd();
+    shot.shoot = Some(ShotCommand {
+        launch_velocity: 5.0,
+        hood_angle: 0.5,
+        turret_yaw: 0.0,
+        launch_height: 0.6,
+    });
+    w.step(&[Some(shot), None]);
+    assert_eq!(w.held[0], 0, "feed start consumes the held piece");
+
+    // mid-feed (~0.075 s in): the piece is still kinematic, riding the
+    // anchor->muzzle lerp near the robot — not yet ballistic
+    for _ in 0..30 {
+        w.step(&[Some(cmd()), None]);
+    }
+    let mid = w.piece_positions()[0];
+    let rp = w.position(0);
+    let d = ((mid[0] - rp[0]).powi(2) + (mid[2] - rp[2]).powi(2)).sqrt();
+    assert!(d < 1.5, "feeding piece should stay at the robot, d={d}");
+
+    // after feed_time (0.15 s = 60 ticks) + release it launches upward
+    // at hood 0.5 — vy ≈ 2.4 m/s carries it well above mechanism height
+    let mut peak_y = 0.0f32;
+    for _ in 0..120 {
+        w.step(&[Some(cmd()), None]);
+        peak_y = peak_y.max(w.piece_positions()[0][1]);
+    }
+    assert!(
+        peak_y > 1.2,
+        "released piece should launch ballistically upward, peak_y={peak_y}"
+    );
+}
+
 #[test]
 fn inactive_intake_does_not_capture() {
     let mut specs = chassis::default_specs();

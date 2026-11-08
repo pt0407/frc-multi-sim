@@ -270,6 +270,7 @@ mod tests {
             roller_radius: None,
             launch_radius: None,
             muzzle_pos: None,
+            feed_time: None,
             on_arm: false,
         }
     }

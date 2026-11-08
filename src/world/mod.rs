@@ -24,14 +24,34 @@ use noise::SensorNoise;
 use rapier3d::prelude::*;
 
 pub const PHYSICS_HZ: f32 = 400.0;
+/// Default carried-piece feed time (carry anchor -> muzzle) when the
+/// shooter joint doesn't set `feed_time`. ~0.15 s matches a real
+/// intake-to-flywheel transit.
+pub const FEED_TIME_DEFAULT: f32 = 0.15;
 pub const AGENT_EVERY: u32 = 8; // 50 Hz agent tick
 
+/// Feed state for a carried piece traveling carry-anchor -> muzzle
+/// (MoSim GamePieceGraph SendTo/Release: the piece physically traverses
+/// the mechanism path instead of teleporting on shot).
+#[derive(Debug, Clone, Copy)]
+struct FeedState {
+    /// elapsed feed time, s
+    t: f32,
+    /// total feed duration, s
+    dur: f32,
+    /// shot params captured at feed start; launch vel/pos are resolved
+    /// at release against live joint + chassis state
+    shot: crate::ShotCommand,
+}
+
 /// A game piece kinematically carried by a robot (intake capture ->
-/// mechanism ride -> ballistic release).
+/// mechanism ride -> feed -> ballistic release).
 #[derive(Debug, Clone, Copy)]
 struct CarriedPiece {
     handle: RigidBodyHandle,
     robot: usize,
+    /// `Some` while the piece is traveling to the muzzle on a shot
+    feed: Option<FeedState>,
 }
 
 pub struct World {
@@ -478,88 +498,43 @@ impl World {
                     if self.held[i] > 0 && !self.shot_latched[i] && shooter_ready {
                         self.shot_latched[i] = true;
                         self.held[i] -= 1;
-                        // aim: a physical turret joint (driver = "turret")
-                        // tracks the commanded yaw with slew lag — launch
-                        // uses its actual angle, not the raw command
-                        let turret_js = self.joints.get(i).and_then(|js| {
-                            js.iter().find(|j| {
-                                j.spec.driver == crate::archetype::JointDriver::Turret
-                            })
-                        });
-                        let aim = yaw
-                            + turret_js
-                                .map(|j| j.pos[0])
-                                .unwrap_or(shot.turret_yaw);
-                        let hv = shot.launch_velocity * shot.hood_angle.cos();
-                        let mut vel = [
-                            hv * aim.cos() + lv.x,
-                            shot.launch_velocity * shot.hood_angle.sin(),
-                            hv * aim.sin() + lv.z,
-                        ];
-                        // physics-derived exit speed: a shooter joint with
-                        // `launch_radius` sets the magnitude from actual
-                        // flywheel ω (MoSim FlywheelBehaviour) — direction
-                        // still comes from aim + hood + chassis velocity
-                        if let Some(js) = self
-                            .joints
-                            .get(i)
-                            .into_iter()
-                            .flatten()
-                            .find(|j| j.spec.driver == crate::archetype::JointDriver::Shooter)
+                        // physically-carried piece: feed it carry-anchor ->
+                        // muzzle over `feed_time` (MoSim SendTo path — the
+                        // piece visibly travels the mechanism); launch
+                        // vel/pos resolve at release against live flywheel,
+                        // turret and chassis state. Preload inventory
+                        // (held with no body) still launches instantly.
+                        if let Some(ci) = self
+                            .carried
+                            .iter()
+                            .position(|c| c.robot == i && c.feed.is_none())
                         {
-                            if let Some(lr) = js.spec.launch_radius {
-                                let speed = js.vel[0] * lr * 1.8;
-                                let cur =
-                                    (vel[0] * vel[0] + vel[1] * vel[1] + vel[2] * vel[2]).sqrt();
-                                if cur > 1e-4 {
-                                    let k = speed / cur;
-                                    vel = [vel[0] * k, vel[1] * k, vel[2] * k];
-                                }
-                            }
-                        }
-                        // launch point: a shooter joint's `muzzle_pos`
-                        // (chassis frame) places the exit on the mechanism;
-                        // otherwise chassis center + launch_height
-                        let launch_pos = self
-                            .joints
-                            .get(i)
-                            .into_iter()
-                            .flatten()
-                            .find(|j| j.spec.driver == crate::archetype::JointDriver::Shooter)
-                            .and_then(|j| j.spec.muzzle_pos)
-                            .map(|m| {
-                                let (s, c) = yaw.sin_cos();
-                                [
-                                    pos.x + m[0] * c + m[2] * s,
-                                    pos.y + m[1],
-                                    pos.z - m[0] * s + m[2] * c,
-                                ]
-                            })
-                            .unwrap_or([pos.x, pos.y + shot.launch_height, pos.z]);
-                        // release the physically-carried piece if there is
-                        // one; preload inventory (held with no body) still
-                        // spawns a fresh ballistic piece
-                        if let Some(ci) = self.carried.iter().position(|c| c.robot == i) {
-                            let c = self.carried.remove(ci);
-                            let body = &mut self.bodies[c.handle];
-                            body.set_body_type(RigidBodyType::Dynamic, true);
-                            let cols: Vec<ColliderHandle> =
-                                body.colliders().to_vec();
-                            for ch in cols {
-                                if let Some(col) = self.colliders.get_mut(ch) {
-                                    col.set_sensor(false);
-                                }
-                            }
-                            body.set_translation(
-                                vector![launch_pos[0], launch_pos[1], launch_pos[2]],
-                                true,
-                            );
-                            body.set_linvel(
-                                vector![vel[0], vel[1], vel[2]],
-                                true,
-                            );
-                            body.set_angvel(vector![0.0, 4.0, 0.0], true);
+                            let dur = self
+                                .joints
+                                .get(i)
+                                .into_iter()
+                                .flatten()
+                                .find(|j| {
+                                    j.spec.driver
+                                        == crate::archetype::JointDriver::Shooter
+                                })
+                                .and_then(|j| j.spec.feed_time)
+                                .unwrap_or(FEED_TIME_DEFAULT);
+                            self.carried[ci].feed =
+                                Some(FeedState { t: 0.0, dur, shot });
                         } else {
+                            let launch_pos = Self::shot_launch_pos(
+                                &self.bodies,
+                                self.chassis[i],
+                                self.joints.get(i),
+                                &shot,
+                            );
+                            let vel = Self::shot_launch_vel(
+                                &self.bodies,
+                                self.chassis[i],
+                                self.joints.get(i),
+                                &shot,
+                            );
                             self.pieces.push(pieces::spawn_piece(
                                 &mut self.bodies,
                                 &mut self.colliders,
@@ -633,7 +608,11 @@ impl World {
         }
         // carried pieces: kinematic-follow their robot's carry anchor
         // (chassis-frame offset rotated by yaw, riding at hopper height).
+        // Feeding pieces lerp anchor -> muzzle over `feed_time` and
+        // release ballistically at the end (MoSim SendTo/Release path).
         // Set before pipeline.step so Rapier moves them with the robot.
+        let mut feed_releases: Vec<(RigidBodyHandle, usize, crate::ShotCommand)> =
+            Vec::new();
         for c in &self.carried {
             // anchor rides the mechanism arm when the robot has one —
             // the piece visibly travels with the intake arm from scoop
@@ -655,8 +634,67 @@ impl World {
                     rpos[2] - 0.30 * s,
                 ]
             };
+            // feeding pieces travel anchor -> live muzzle position so a
+            // moving robot / slewing turret carries the piece with it
+            let target = if let Some(f) = &c.feed {
+                let k = (f.t / f.dur.max(1e-4)).min(1.0);
+                // smoothstep: the piece accelerates out of the mechanism
+                // like a real feed, not a constant-speed slide
+                let e = k * k * (3.0 - 2.0 * k);
+                let muzzle = Self::shot_launch_pos(
+                    &self.bodies,
+                    self.chassis[c.robot],
+                    self.joints.get(c.robot),
+                    &f.shot,
+                );
+                [
+                    anchor[0] + (muzzle[0] - anchor[0]) * e,
+                    anchor[1] + (muzzle[1] - anchor[1]) * e,
+                    anchor[2] + (muzzle[2] - anchor[2]) * e,
+                ]
+            } else {
+                anchor
+            };
             let body = &mut self.bodies[c.handle];
-            body.set_next_kinematic_translation(vector![anchor[0], anchor[1], anchor[2]]);
+            body.set_next_kinematic_translation(vector![
+                target[0], target[1], target[2]
+            ]);
+        }
+        // advance feed clocks and release finished pieces ballistically
+        for c in &mut self.carried {
+            let Some(f) = &mut c.feed else { continue };
+            f.t += self.integration.dt;
+            if f.t >= f.dur {
+                feed_releases.push((c.handle, c.robot, f.shot));
+            }
+        }
+        for (handle, robot, shot) in feed_releases {
+            if let Some(ci) = self.carried.iter().position(|c| c.handle == handle) {
+                self.carried.remove(ci);
+            }
+            let vel = Self::shot_launch_vel(
+                &self.bodies,
+                self.chassis[robot],
+                self.joints.get(robot),
+                &shot,
+            );
+            let lp = Self::shot_launch_pos(
+                &self.bodies,
+                self.chassis[robot],
+                self.joints.get(robot),
+                &shot,
+            );
+            let body = &mut self.bodies[handle];
+            body.set_body_type(RigidBodyType::Dynamic, true);
+            let cols: Vec<ColliderHandle> = body.colliders().to_vec();
+            for ch in cols {
+                if let Some(col) = self.colliders.get_mut(ch) {
+                    col.set_sensor(false);
+                }
+            }
+            body.set_translation(vector![lp[0], lp[1], lp[2]], true);
+            body.set_linvel(vector![vel[0], vel[1], vel[2]], true);
+            body.set_angvel(vector![0.0, 4.0, 0.0], true);
         }
         // mechanism rollers: spinning joint surfaces drag free pieces
         // toward the intake (MoSim InteractionRoller — rollers reach
@@ -791,7 +829,14 @@ impl World {
                     let capacity = self.intakes[i]
                         .and_then(|s| s.capacity)
                         .unwrap_or(crate::archetype::HOPPER_DEFAULT);
-                    if self.held[i] < capacity
+                    // feeding pieces already left `held` but are still
+                    // aboard until release — count them for capacity
+                    let feeding = self
+                        .carried
+                        .iter()
+                        .filter(|c| c.robot == i && c.feed.is_some())
+                        .count() as u32;
+                    if self.held[i] + feeding < capacity
                         && pieces::intake_contains(
                             &self.intakes[i].unwrap(),
                             rpos,
@@ -823,6 +868,7 @@ impl World {
                         self.carried.push(CarriedPiece {
                             handle: *h,
                             robot: i,
+                            feed: None,
                         });
                         captured = true;
                         break;
@@ -1055,6 +1101,86 @@ impl World {
             (m.spec.pivot, mech::arm_angle(&self.bodies, m.arm) - cyaw)
         });
         Some(Self::roller_anchor(rp, js.spec.on_arm, cpos, cyaw, arm))
+    }
+
+    /// World launch position for robot `i`'s shot: the shooter joint's
+    /// `muzzle_pos` (chassis frame, yaw-rotated) or chassis center +
+    /// `launch_height`. Associated fn (not `&self`) so feed code can call
+    /// it while `carried` is mutably borrowed.
+    fn shot_launch_pos(
+        bodies: &RigidBodySet,
+        chassis: RigidBodyHandle,
+        joints: Option<&Vec<joint::JointSim>>,
+        shot: &crate::ShotCommand,
+    ) -> [f32; 3] {
+        let b = &bodies[chassis];
+        let t = b.translation();
+        let r = b.rotation();
+        let yaw = yaw_from_quat([r.i, r.j, r.k, r.w]);
+        if let Some(m) = joints
+            .into_iter()
+            .flatten()
+            .find(|j| j.spec.driver == crate::archetype::JointDriver::Shooter)
+            .and_then(|j| j.spec.muzzle_pos)
+        {
+            let (s, c) = yaw.sin_cos();
+            [
+                t.x + m[0] * c + m[2] * s,
+                t.y + m[1],
+                t.z - m[0] * s + m[2] * c,
+            ]
+        } else {
+            [t.x, t.y + shot.launch_height, t.z]
+        }
+    }
+
+    /// Launch velocity for robot `i`'s shot at current joint/chassis
+    /// state: turret joint angle (slew lag included) or commanded
+    /// `turret_yaw`, hood angle, chassis velocity, and flywheel-derived
+    /// exit speed when the shooter joint sets `launch_radius`.
+    fn shot_launch_vel(
+        bodies: &RigidBodySet,
+        chassis: RigidBodyHandle,
+        joints: Option<&Vec<joint::JointSim>>,
+        shot: &crate::ShotCommand,
+    ) -> [f32; 3] {
+        let b = &bodies[chassis];
+        let r = b.rotation();
+        let lv = b.linvel();
+        let yaw = yaw_from_quat([r.i, r.j, r.k, r.w]);
+        // aim: a physical turret joint tracks the commanded yaw — launch
+        // uses its actual angle, not the raw command
+        let aim = yaw
+            + joints
+                .into_iter()
+                .flatten()
+                .find(|j| j.spec.driver == crate::archetype::JointDriver::Turret)
+                .map(|j| j.pos[0])
+                .unwrap_or(shot.turret_yaw);
+        let hv = shot.launch_velocity * shot.hood_angle.cos();
+        let mut vel = [
+            hv * aim.cos() + lv.x,
+            shot.launch_velocity * shot.hood_angle.sin(),
+            hv * aim.sin() + lv.z,
+        ];
+        // physics-derived exit speed: `launch_radius` sets the magnitude
+        // from actual flywheel ω (MoSim FlywheelBehaviour)
+        if let Some(js) = joints
+            .into_iter()
+            .flatten()
+            .find(|j| j.spec.driver == crate::archetype::JointDriver::Shooter)
+        {
+            if let Some(lr) = js.spec.launch_radius {
+                let speed = js.vel[0] * lr * 1.8;
+                let cur =
+                    (vel[0] * vel[0] + vel[1] * vel[1] + vel[2] * vel[2]).sqrt();
+                if cur > 1e-4 {
+                    let k = speed / cur;
+                    vel = [vel[0] * k, vel[1] * k, vel[2] * k];
+                }
+            }
+        }
+        vel
     }
 
     /// Resolve a roller anchor to world coords. `arm` is the robot's
