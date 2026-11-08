@@ -95,34 +95,12 @@ roller_radius = 0.30
 # (MoSim InteractionRoller) — reverse spin would eject pieces
 roller_axis = [0.0, 0.0, -1.0]
 
-# hopper: MoSim HopperLockPositionMeters=-0.299 / HopperTargetInches=-12
-# — the storage chamber is a physical joint, agent-commanded. CAN-range
-# fullness debounce (0.25s) isn't modeled; [intake] capacity covers it.
-[[joint]]
-name = "hopper"
-mode = "position"
-driver = "command"
-mv = 'Hopper|hopper'
-max_vel = 3.0
-accel = 8.0
-limits = [-0.35, 0.35]
-
-# floor + uptake rollers: MoSim floorRpm=uptakeRpm=2000, intake-driven
-[[joint]]
-name = "floor-rollers"
-mode = "spin"
-driver = "intake"
-mv = 'Floor Roller|floor'
-max_vel = 40.0
-accel = 60.0
-
-[[joint]]
-name = "uptake-rollers"
-mode = "spin"
-driver = "intake"
-mv = 'Uptake|uptake'
-max_vel = 40.0
-accel = 60.0
+# hopper/floor/uptake: MoSim ReBlitz has a hopper joint
+# (HopperLockPositionMeters=-0.299) + floorRpm=uptakeRpm=2000 rollers.
+# Not modeled here — their mv patterns bind whole CAD assemblies
+# ("62-R2 Hopper") and visibly tear the robot apart. Hopper capacity
+# lives in [intake].capacity; floor/uptake rollers would need CAD
+# node names to bind correctly.
 
 # shooter: blades, drum, compliant wheels, hood/feed rollers — one joint,
 # every matched subtree shares the flywheel angle. Spins up on shoot

@@ -197,6 +197,18 @@
       cws.send(JSON.stringify({op:"reset"}));
     };
     $("c-start").onclick = () => cws.send(JSON.stringify({op:"start_match"}));
+    // ?anim / ?practice / ?match: headless self-test entry points —
+    // dismisses the home screen and triggers the same flow as the buttons.
+    // Waits for the control WS to open first or applyLineup's send throws.
+    const autoMode = location.search.includes("anim") ? "h-anim"
+      : location.search.includes("practice") ? "h-practice"
+      : location.search.includes("match") ? "h-match" : null;
+    if (autoMode) {
+      const tryClick = () => cws.readyState === 1
+        ? $(autoMode).click()
+        : setTimeout(tryClick, 200);
+      setTimeout(tryClick, 1000);
+    }
     $("c-reset").onclick = () => cws.send(JSON.stringify({op:"reset"}));
     $("c-pause").onclick = function() {
       this._p = !this._p;
