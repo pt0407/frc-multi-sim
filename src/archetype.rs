@@ -311,6 +311,21 @@ pub struct JointSpec {
     /// wheel-mode rolling radius, m — omega = module_speed / radius
     #[serde(default)]
     pub wheel_radius: f32,
+    /// roller contact zone: chassis-frame anchor [x,y,z] of the roller
+    /// surface. When the joint is spinning, free pieces inside
+    /// `roller_radius` get dragged toward the intake — the MoSim
+    /// InteractionRoller effect (rollers reach beyond the capture AABB).
+    #[serde(default)]
+    pub roller_pos: Option<[f32; 3]>,
+    /// roller interaction radius, m (default 0.3)
+    #[serde(default)]
+    pub roller_radius: Option<f32>,
+    /// shooter exit radius, m: when set on a `driver = "shooter"` joint,
+    /// launch speed is physics-derived as vel·radius·1.8 (compression-
+    /// wheel exit factor, MoSim FlywheelBehaviour) instead of trusting
+    /// the agent's declared launch_velocity magnitude
+    #[serde(default)]
+    pub launch_radius: Option<f32>,
 }
 
 fn jm_spin() -> JointMode {

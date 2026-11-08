@@ -77,6 +77,10 @@ driver = "intake"
 mv = 'Roller Deadaxle|2" Roller Assembly'
 max_vel = 18.0
 accel = 30.0
+# roller contact zone (chassis frame): deployed-arm scoop position —
+# spinning rollers drag free pieces toward the intake AABB
+roller_pos = [0.55, 0.15, 0.0]
+roller_radius = 0.30
 
 # shooter: blades, drum, compliant wheels, hood/feed rollers — one joint,
 # every matched subtree shares the flywheel angle. Spins up on shoot
@@ -87,8 +91,13 @@ mode = "spin"
 driver = "shooter"
 mv = 'Blades|Main Drum|Compliant Wheel|Thin Aluminum Roller|Hood Roller'
 scope = '32 - R2 Shooter'
-max_vel = 40.0    # rad/s flywheel speed
-accel = 60.0      # rad/s^2 spin-up
+# physical flywheel speed: ~40 RPS = 250 rad/s (their RPM table tops ~2900);
+# 1.2 s spin-up per MoSim FlywheelBehaviour
+max_vel = 250.0
+accel = 210.0
+# compression-wheel exit radius (62 mm wheel): launch speed =
+# vel·radius·1.8 — physics-derived, not agent-declared
+launch_radius = 0.031
 
 # vision camera (AprilTag localization): front-mounted, sees perimeter +
 # hub tags for pose estimates. Detected ids stream in SensorFrame.vision_tags;

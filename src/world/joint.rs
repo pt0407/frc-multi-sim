@@ -244,6 +244,9 @@ mod tests {
             accel: 20.0,
             limits: None,
             wheel_radius: 0.0,
+            roller_pos: None,
+            roller_radius: None,
+            launch_radius: None,
         }
     }
 

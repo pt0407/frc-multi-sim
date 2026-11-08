@@ -480,11 +480,32 @@ impl World {
                         self.held[i] -= 1;
                         let aim = yaw + shot.turret_yaw;
                         let hv = shot.launch_velocity * shot.hood_angle.cos();
-                        let vel = [
+                        let mut vel = [
                             hv * aim.cos() + lv.x,
                             shot.launch_velocity * shot.hood_angle.sin(),
                             hv * aim.sin() + lv.z,
                         ];
+                        // physics-derived exit speed: a shooter joint with
+                        // `launch_radius` sets the magnitude from actual
+                        // flywheel ω (MoSim FlywheelBehaviour) — direction
+                        // still comes from aim + hood + chassis velocity
+                        if let Some(js) = self
+                            .joints
+                            .get(i)
+                            .into_iter()
+                            .flatten()
+                            .find(|j| j.spec.driver == crate::archetype::JointDriver::Shooter)
+                        {
+                            if let Some(lr) = js.spec.launch_radius {
+                                let speed = js.vel[0] * lr * 1.8;
+                                let cur =
+                                    (vel[0] * vel[0] + vel[1] * vel[1] + vel[2] * vel[2]).sqrt();
+                                if cur > 1e-4 {
+                                    let k = speed / cur;
+                                    vel = [vel[0] * k, vel[1] * k, vel[2] * k];
+                                }
+                            }
+                        }
                         let launch_pos = [pos.x, pos.y + shot.launch_height, pos.z];
                         // release the physically-carried piece if there is
                         // one; preload inventory (held with no body) still
@@ -608,6 +629,10 @@ impl World {
             let body = &mut self.bodies[c.handle];
             body.set_next_kinematic_translation(vector![anchor[0], anchor[1], anchor[2]]);
         }
+        // mechanism rollers: spinning joint surfaces drag free pieces
+        // toward the intake (MoSim InteractionRoller — rollers reach
+        // beyond the capture AABB and actively gather fuel)
+        self.apply_roller_forces();
         // quadratic air drag on free pieces (FuelSim DRAG_FORCE_FACTOR)
         pieces::apply_drag(&mut self.bodies, &self.pieces);
         self.pipeline.step(
@@ -811,6 +836,93 @@ impl World {
                 &mut self.colliders,
                 &mut self.impulse_joints,
                 &mut self.multibody_joints,
+                true,
+            );
+        }
+    }
+
+    /// Roller contact model: for every spinning joint with a `roller_pos`
+    /// zone, free pieces inside the radius are dragged toward the robot's
+    /// intake center, scaled by how fast the rollers turn. Runs before
+    /// `pipeline.step`; deterministic (no RNG).
+    fn apply_roller_forces(&mut self) {
+        // build zones: (anchor world pos, pull-target world pos, radius, spin)
+        let mut zones: Vec<([f32; 3], [f32; 3], f32, f32)> = Vec::new();
+        for i in 0..self.chassis.len() {
+            let Some(intake) = self.intakes[i] else { continue };
+            let (cpos, cyaw) = {
+                let b = &self.bodies[self.chassis[i]];
+                let r = b.rotation();
+                let t = b.translation();
+                ([t.x, t.y, t.z], yaw_from_quat([r.i, r.j, r.k, r.w]))
+            };
+            let (s, c) = cyaw.sin_cos();
+            // intake center in world (x/z only — pull is horizontal)
+            let icx = (intake.x_min + intake.x_max) * 0.5;
+            let icz = (intake.z_min + intake.z_max) * 0.5;
+            let target = [
+                cpos[0] + icx * c + icz * s,
+                cpos[1],
+                cpos[2] - icx * s + icz * c,
+            ];
+            for js in self.joints.get(i).into_iter().flatten() {
+                let Some(rp) = js.spec.roller_pos else { continue };
+                // rollers must actually be turning to grab anything
+                let spin = js.vel[0].abs();
+                if spin < 2.0 {
+                    continue;
+                }
+                let anchor = [
+                    cpos[0] + rp[0] * c + rp[2] * s,
+                    cpos[1] + rp[1],
+                    cpos[2] - rp[0] * s + rp[2] * c,
+                ];
+                let radius = js.spec.roller_radius.unwrap_or(0.3);
+                // strength scales with spin fraction of max_vel
+                let strength = (spin / js.spec.max_vel.max(1.0)).clamp(0.0, 1.0);
+                zones.push((anchor, target, radius, strength));
+            }
+        }
+        if zones.is_empty() {
+            return;
+        }
+        for &h in &self.pieces {
+            // carried pieces are kinematically glued — skip
+            if self.carried.iter().any(|cp| cp.handle == h) {
+                continue;
+            }
+            let (pos, in_zone) = {
+                let body = &self.bodies[h];
+                let t = body.translation();
+                let p = [t.x, t.y, t.z];
+                // nearest zone wins (anchor, target, strength)
+                let mut best: Option<([f32; 3], f32)> = None;
+                let mut best_d = f32::INFINITY;
+                for (a, tgt, r, st) in &zones {
+                    let dx = p[0] - a[0];
+                    let dz = p[2] - a[2];
+                    let dy = p[1] - a[1];
+                    let d2 = dx * dx + dz * dz;
+                    if d2 < r * r && dy.abs() < r * 1.5 && d2 < best_d {
+                        best_d = d2;
+                        best = Some((*tgt, *st));
+                    }
+                }
+                (p, best)
+            };
+            let Some((tgt, strength)) = in_zone else { continue };
+            // pull horizontally toward the intake center; ~20 m/s² peak —
+            // rollers drag fuel in without launching it
+            let dx = tgt[0] - pos[0];
+            let dz = tgt[2] - pos[2];
+            let d = (dx * dx + dz * dz).sqrt();
+            if d < 1e-4 {
+                continue;
+            }
+            let f = 4.0 * strength; // N — ~20 m/s² on a 0.2 kg piece
+            let body = &mut self.bodies[h];
+            body.add_force(
+                vector![f * dx / d, 0.0, f * dz / d],
                 true,
             );
         }
