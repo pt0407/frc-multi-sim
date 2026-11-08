@@ -111,6 +111,16 @@ muzzle_pos = [0.40, 0.55, 0.0]
 # feed path: carried fuel routes up through the hopper throat before the
 # muzzle instead of sliding in a straight line (MoSim path-graph nodes)
 feed_path = [[0.34, 0.50, 0.0]]
+# distance-keyed shot table (MoSim RebuiltInterpolation): flywheel speed
+# and hood angle auto-compute from range to the nearest hub — close
+# shots run slower/flatter, long hub shots spool up and steepen
+shot_table = [
+  { distance = 1.5, flywheel = 0.35, hood = 0.15 },
+  { distance = 3.0, flywheel = 0.55, hood = 0.35 },
+  { distance = 4.5, flywheel = 0.75, hood = 0.55 },
+  { distance = 6.0, flywheel = 0.90, hood = 0.70 },
+  { distance = 8.0, flywheel = 1.00, hood = 0.85 },
+]
 
 # hood: the pivoting deflector (32-17 Hood Assembly) is a physical
 # position joint tracking the shot's hood_angle — launch elevation uses

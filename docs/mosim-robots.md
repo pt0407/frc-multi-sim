@@ -123,8 +123,11 @@ flywheel/hood/tof per side).
 
 - **Distance-keyed shot tables are the big one** — every robot lerps
   flywheel RPM and hood angle by distance-to-target instead of fixed
-  values. Our `ShotCommand` should support per-distance presets or an
-  interpolation table; flat `launch_velocity`+`hood_angle` is the gap.
+  values. Implemented: `JointSpec.shot_table` + `shot_preset_at`
+  (`archetype.rs`), resolved per-tick from distance-to-nearest-hub in
+  `World::step`; shooter spin target scales by `flywheel` fraction and
+  the hood joint tracks the interpolated angle (command ignored while a
+  table is present). 2910 authored with a 5-row table.
 - Hood range is universally **0–35°**; aim tolerance ~2°; feed latch
   debounces 60 ms — cheap rules to mirror.
 - Roller RPMs cluster at **2000 RPM** intake/uptake/floor/indexer;

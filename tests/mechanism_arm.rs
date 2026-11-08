@@ -152,6 +152,7 @@ fn arm_roller_joint() -> JointSpec {
         muzzle_pos: None,
         feed_time: None,
         feed_path: None,
+            shot_table: None,
         on_arm: true,
     }
 }

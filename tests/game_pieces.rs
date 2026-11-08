@@ -551,6 +551,7 @@ fn roller_axis_surface_velocity_sets_push_direction() {
         muzzle_pos: None,
         feed_time: None,
         feed_path: None,
+            shot_table: None,
         on_arm: false,
     };
     // intake region parked far ahead so rollers spin without capturing
@@ -618,6 +619,7 @@ fn feed_path_routes_piece_through_waypoints() {
         // waypoint high above the direct anchor->muzzle line
         feed_path: Some(vec![[0.0, 0.9, 0.0]]),
         on_arm: false,
+        shot_table: None,
     };
     let mut specs = chassis::default_specs();
     specs[0].spawn = [-4.0, specs[0].spawn[1], 0.0];

@@ -489,6 +489,12 @@ impl World {
                 };
                 let n_joints = self.joints.get(i).map(|j| j.len()).unwrap_or(0);
                 if n_joints > 0 {
+                    // distance-keyed shot table: nearest hub range drives
+                    // flywheel RPM + hood angle (MoSim RebuiltInterpolation)
+                    let shot_preset = joint::resolve_shot_preset(
+                        self.joints.get(i).map(Vec::as_slice).unwrap_or(&[]),
+                        self.nearest_hub_dist([pos.x, pos.y, pos.z]),
+                    );
                     // split borrows: joints mutate, drivetrain reads
                     let (js, dt_) = {
                         let js = self.joints.get_mut(i).unwrap();
@@ -505,6 +511,7 @@ impl World {
                             cmd.shooter_on,
                             dt_,
                             lv_robot,
+                            shot_preset,
                         );
                     }
                 }
@@ -1429,6 +1436,21 @@ impl World {
             (m.spec.pivot, mech::arm_angle(&self.bodies, m.arm) - cyaw)
         });
         Some(Self::roller_anchor(rp, js.spec.on_arm, cpos, cyaw, arm))
+    }
+
+    /// 3D distance to the nearest hub entry point — the range input for
+    /// distance-keyed `shot_table`s (MoSim interpolates flywheel RPM and
+    /// hood angle by distance to the selected aim node).
+    fn nearest_hub_dist(&self, pos: [f32; 3]) -> Option<f32> {
+        self.hubs
+            .iter()
+            .map(|h| {
+                let dx = pos[0] - h.center[0];
+                let dz = pos[2] - h.center[1];
+                let dy = pos[1] - h.entry_height;
+                (dx * dx + dy * dy + dz * dz).sqrt()
+            })
+            .reduce(f32::min)
     }
 
     /// World launch position for robot `i`'s shot: the shooter joint's

@@ -266,6 +266,48 @@ pub enum JointDriver {
     Hood,
 }
 
+/// One row of a distance-keyed shot table (MoSim `Interpolation` /
+/// `DistanceValue`): at `distance` metres from the target, the flywheel
+/// runs at `flywheel` × the joint's `max_vel` and the hood sits at
+/// `hood` radians. Rows are sorted by distance and linearly
+/// interpolated, clamped at the ends.
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
+pub struct ShotPreset {
+    /// distance to the scoring target, m
+    pub distance: f32,
+    /// flywheel speed as a fraction of the joint's `max_vel` (0..1)
+    pub flywheel: f32,
+    /// hood angle, rad (0 = horizontal)
+    pub hood: f32,
+}
+
+/// Interpolate a distance-keyed shot table at `dist` metres (MoSim
+/// `Interpolation`/`DistanceValue` lookup): rows are sorted by
+/// distance, linearly interpolated, clamped at the ends. Returns `None`
+/// for an empty table.
+pub fn shot_preset_at(table: &[ShotPreset], dist: f32) -> Option<ShotPreset> {
+    if table.is_empty() {
+        return None;
+    }
+    let mut rows: Vec<&ShotPreset> = table.iter().collect();
+    rows.sort_by(|a, b| a.distance.partial_cmp(&b.distance).unwrap());
+    if dist <= rows[0].distance {
+        return Some(*rows[0]);
+    }
+    for w in rows.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        if dist <= b.distance {
+            let t = (dist - a.distance) / (b.distance - a.distance).max(1e-6);
+            return Some(ShotPreset {
+                distance: dist,
+                flywheel: a.flywheel + (b.flywheel - a.flywheel) * t,
+                hood: a.hood + (b.hood - a.hood) * t,
+            });
+        }
+    }
+    Some(*rows[rows.len() - 1])
+}
+
 /// Kinematic mechanism joint spec — the data-driven equivalent of
 /// MoSim's roller/flywheel/turret MonoBehaviours. The `mv` regex selects
 /// the CAD subtree(s) to animate; `scope` optionally restricts matches
@@ -363,6 +405,15 @@ pub struct JointSpec {
     /// Unset/empty = direct anchor -> muzzle lerp.
     #[serde(default)]
     pub feed_path: Option<Vec<[f32; 3]>>,
+    /// distance-keyed shot table (MoSim `RebuiltInterpolation`): when
+    /// set on a `driver = "shooter"` joint, flywheel speed and (with a
+    /// `driver = "hood"` joint) hood angle are interpolated from the
+    /// robot's distance to the nearest scoring hub each tick, instead of
+    /// running flat out / trusting the commanded hood angle. Agents
+    /// still send `shoot`; the mechanism auto-computes like a real
+    /// robot's interpolation table.
+    #[serde(default)]
+    pub shot_table: Option<Vec<ShotPreset>>,
 }
 
 fn jm_spin() -> JointMode {

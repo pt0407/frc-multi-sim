@@ -12,7 +12,17 @@
 //! Spin joints servo velocity directly; position joints servo a
 //! velocity toward the target angle (trapezoidal-ish, max_vel capped);
 //! steer/wheel derive their target from drivetrain module state.
-use crate::archetype::{JointDriver, JointMode, JointSpec};
+use crate::archetype::{JointDriver, JointMode, JointSpec, ShotPreset};
+
+/// Resolve a robot's shot preset for this tick: the first joint spec
+/// carrying a `shot_table` interpolates at `dist` (MoSim
+/// RebuiltInterpolation — one table drives both flywheel RPM and hood).
+pub fn resolve_shot_preset(joints: &[JointSim], dist: Option<f32>) -> Option<ShotPreset> {
+    let dist = dist?;
+    joints
+        .iter()
+        .find_map(|j| j.spec.shot_table.as_deref().and_then(|t| crate::archetype::shot_preset_at(t, dist)))
+}
 use crate::drivetrain::Drivetrain;
 use crate::protocol::{ActuatorFrame, JointCmdMode};
 
@@ -26,6 +36,9 @@ pub struct JointSim {
     pub pos: Vec<f32>,
     /// joint velocity per channel (rad/s)
     pub vel: Vec<f32>,
+    /// last commanded spin target (rad/s) — `shooter_at_speed` compares
+    /// against this so distance-keyed shot tables scale the tolerance
+    speed_target: f32,
 }
 
 impl JointSim {
@@ -34,11 +47,13 @@ impl JointSim {
             JointMode::Steer | JointMode::Wheel => n_modules.max(1),
             _ => 1,
         };
+        let speed_target = spec.max_vel;
         JointSim {
             spec,
             n,
             pos: vec![0.0; n],
             vel: vec![0.0; n],
+            speed_target,
         }
     }
 
@@ -56,8 +71,12 @@ impl JointSim {
         shooter_on: bool,
         dt_: &Drivetrain,
         chassis_lv_robot: [f32; 2],
+        // resolved distance-keyed shot preset (flywheel frac + hood rad);
+        // drives `shot_table` automation on shooter/hood drivers
+        shot_preset: Option<ShotPreset>,
     ) {
         let spec = &self.spec;
+        let preset = shot_preset;
         let dv = spec.accel * dt;
         match spec.mode {
             JointMode::Spin => {
@@ -71,9 +90,12 @@ impl JointSim {
                     }
                     JointDriver::Shooter => {
                         // spin up while a shot is requested or the flywheel
-                        // is enabled; spin down otherwise
+                        // is enabled; spin down otherwise. A shot_table
+                        // scales the target by distance (close shots need
+                        // less RPM — MoSim alliance/pass-zone interpolation)
                         if shooter_request || shooter_on {
-                            target_vel = spec.max_vel;
+                            target_vel = spec.max_vel
+                                * preset.map(|p| p.flywheel).unwrap_or(1.0);
                         }
                     }
                     JointDriver::Command => {
@@ -111,6 +133,7 @@ impl JointSim {
                     dv * 2.0
                 };
                 self.vel[0] += (target_vel - self.vel[0]).clamp(-rate, rate);
+                self.speed_target = target_vel;
                 self.pos[0] += self.vel[0] * dt;
             }
             JointMode::Position => {
@@ -120,16 +143,24 @@ impl JointSim {
                     spec.driver,
                     JointDriver::Turret | JointDriver::Hood
                 ) {
-                    let mut target = cmd
-                        .shoot
-                        .map(|s| {
+                    // a shot_table on the hood joint overrides the
+                    // commanded angle with the distance-interpolated one
+                    // (MoSim: hood angle is automation, not a command)
+                    let mut target = if spec.driver == JointDriver::Hood {
+                        preset.map(|p| p.hood)
+                    } else {
+                        None
+                    }
+                    .or_else(|| {
+                        cmd.shoot.map(|s| {
                             if spec.driver == JointDriver::Turret {
                                 s.turret_yaw
                             } else {
                                 s.hood_angle
                             }
                         })
-                        .unwrap_or(self.pos[0]);
+                    })
+                    .unwrap_or(self.pos[0]);
                     if let Some(l) = spec.limits {
                         target = target.clamp(l[0], l[1]);
                     }
@@ -231,7 +262,8 @@ impl JointSim {
         if self.spec.driver != JointDriver::Shooter {
             return true;
         }
-        self.vel.iter().all(|v| v.abs() >= self.spec.max_vel * 0.8)
+        let t = self.speed_target.abs();
+        self.vel.iter().all(|v| v.abs() >= t * 0.8)
     }
 
     /// Ball-contact dip (MoSim FlywheelBehaviour): each launched piece
@@ -282,6 +314,7 @@ mod tests {
             muzzle_pos: None,
             feed_time: None,
             feed_path: None,
+            shot_table: None,
             on_arm: false,
         }
     }
@@ -306,18 +339,18 @@ mod tests {
         let c = cmd();
         // intake on: target vel = max_vel, but accel caps the ramp
         for _ in 0..10 {
-            j.step(0, &c, 1.0 / 400.0, true, false, false, &dt, [0.0, 0.0]);
+            j.step(0, &c, 1.0 / 400.0, true, false, false, &dt, [0.0, 0.0], None);
         }
         assert!(j.vel[0] > 0.0 && j.vel[0] < 10.0, "vel={}", j.vel[0]);
         assert!(j.pos[0] > 0.0);
         // after enough time it reaches target speed
         for _ in 0..400 {
-            j.step(0, &c, 1.0 / 400.0, true, false, false, &dt, [0.0, 0.0]);
+            j.step(0, &c, 1.0 / 400.0, true, false, false, &dt, [0.0, 0.0], None);
         }
         assert!((j.vel[0] - 10.0).abs() < 0.5, "vel={}", j.vel[0]);
         // intake off: spins down
         for _ in 0..400 {
-            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0]);
+            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
         }
         assert!(j.vel[0].abs() < 1.0, "vel={}", j.vel[0]);
     }
@@ -337,7 +370,7 @@ mod tests {
             launch_height: 0.5,
         });
         for _ in 0..400 {
-            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0]);
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None);
         }
         assert!(j.shooter_at_speed(), "vel={}", j.vel[0]);
     }
@@ -359,18 +392,18 @@ mod tests {
         });
         // early ticks: moving toward 1.0 rad but lagging (real slew)
         for _ in 0..20 {
-            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0]);
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None);
         }
         assert!(j.pos[0] > 0.0 && j.pos[0] < 0.5, "pos={}", j.pos[0]);
         // settles on target
         for _ in 0..2000 {
-            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0]);
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None);
         }
         assert!((j.pos[0] - 1.0).abs() < 0.05, "pos={}", j.pos[0]);
         // no shot command: holds last angle
         c.shoot = None;
         for _ in 0..400 {
-            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0]);
+            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
         }
         assert!((j.pos[0] - 1.0).abs() < 0.05, "pos={}", j.pos[0]);
     }
@@ -391,17 +424,17 @@ mod tests {
             launch_height: 0.5,
         });
         for _ in 0..20 {
-            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0]);
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None);
         }
         assert!(j.pos[0] > 0.0 && j.pos[0] < 0.4, "pos={}", j.pos[0]);
         for _ in 0..2000 {
-            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0]);
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None);
         }
         assert!((j.pos[0] - 0.8).abs() < 0.05, "pos={}", j.pos[0]);
         // hood holds its angle when no shot is requested
         c.shoot = None;
         for _ in 0..400 {
-            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0]);
+            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
         }
         assert!((j.pos[0] - 0.8).abs() < 0.05, "pos={}", j.pos[0]);
     }
@@ -432,7 +465,7 @@ mod tests {
         };
         dt.resolve(&c, &kin);
         for _ in 0..400 {
-            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0]);
+            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], None);
         }
         for (i, p) in j.pos.iter().enumerate() {
             let err = (p - std::f32::consts::FRAC_PI_2)
@@ -440,5 +473,82 @@ mod tests {
                 .min((p + std::f32::consts::FRAC_PI_2).abs());
             assert!(err < 0.2, "ch{i} pos={p}");
         }
+    }
+
+    #[test]
+    fn shot_table_scales_flywheel_and_hood_by_distance() {
+        use crate::archetype::{shot_preset_at, ShotPreset};
+        let table = vec![
+            ShotPreset { distance: 2.0, flywheel: 0.4, hood: 0.2 },
+            ShotPreset { distance: 6.0, flywheel: 0.8, hood: 0.6 },
+        ];
+        // interpolation + clamping
+        let near = shot_preset_at(&table, 1.0).unwrap();
+        assert!((near.flywheel - 0.4).abs() < 1e-6 && (near.hood - 0.2).abs() < 1e-6);
+        let mid = shot_preset_at(&table, 4.0).unwrap();
+        assert!((mid.flywheel - 0.6).abs() < 1e-6 && (mid.hood - 0.4).abs() < 1e-6);
+        let far = shot_preset_at(&table, 9.0).unwrap();
+        assert!((far.flywheel - 0.8).abs() < 1e-6);
+
+        // shooter joint: preset halves the flywheel target
+        let mut spec = spin_spec(JointDriver::Shooter);
+        spec.max_vel = 100.0;
+        spec.accel = 100000.0; // fast servo so we settle quickly
+        let mut j = JointSim::new(spec, 4);
+        let dt = Drivetrain::swerve(60.0, 0.4);
+        let mut c = cmd();
+        c.shoot = Some(crate::protocol::ShotCommand {
+            launch_velocity: 10.0,
+            hood_angle: 0.9,
+            turret_yaw: 0.0,
+            launch_height: 0.5,
+        });
+        let preset = shot_preset_at(&table, 4.0).unwrap();
+        for _ in 0..200 {
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], Some(preset));
+        }
+        assert!(
+            (j.vel[0] - 60.0).abs() < 2.0,
+            "flywheel should settle at 60% of max_vel, got {}",
+            j.vel[0]
+        );
+        // without a preset it runs flat out
+        for _ in 0..400 {
+            j.step(0, &c, 1.0 / 400.0, false, true, false, &dt, [0.0, 0.0], None);
+        }
+        assert!(j.vel[0] > 95.0, "vel={}", j.vel[0]);
+    }
+
+    #[test]
+    fn shot_table_drives_hood_angle() {
+        use crate::archetype::{shot_preset_at, ShotPreset};
+        let table = vec![
+            ShotPreset { distance: 2.0, flywheel: 0.4, hood: 0.2 },
+            ShotPreset { distance: 6.0, flywheel: 0.8, hood: 0.6 },
+        ];
+        let mut spec = spin_spec(JointDriver::Hood);
+        spec.mode = JointMode::Position;
+        spec.max_vel = 10.0;
+        spec.accel = 100000.0;
+        spec.limits = Some([0.0, 1.2]);
+        let mut j = JointSim::new(spec, 4);
+        let dt = Drivetrain::swerve(60.0, 0.4);
+        let mut c = cmd();
+        // agent commands a wildly different hood angle — table wins
+        c.shoot = Some(crate::protocol::ShotCommand {
+            launch_velocity: 10.0,
+            hood_angle: 1.1,
+            turret_yaw: 0.0,
+            launch_height: 0.5,
+        });
+        let preset = shot_preset_at(&table, 6.0).unwrap(); // hood = 0.6
+        for _ in 0..200 {
+            j.step(0, &c, 1.0 / 400.0, false, false, false, &dt, [0.0, 0.0], Some(preset));
+        }
+        assert!(
+            (j.pos[0] - 0.6).abs() < 0.05,
+            "hood should settle at table angle 0.6, got {}",
+            j.pos[0]
+        );
     }
 }
