@@ -54,6 +54,16 @@ struct CarriedPiece {
     feed: Option<FeedState>,
 }
 
+/// A scored piece held inside a hub (MoSim occupancy model: scored fuel
+/// stays in the scoring mechanism, visible in the world, and cannot
+/// score again — the 1.5 s per-piece debounce is moot while held).
+#[derive(Debug, Clone, Copy)]
+struct HubHeldPiece {
+    handle: RigidBodyHandle,
+    /// index into `World::hubs`
+    hub: usize,
+}
+
 pub struct World {
     pipeline: PhysicsPipeline,
     gravity: Vector<f32>,
@@ -87,6 +97,8 @@ pub struct World {
     /// Released ballistically on `shoot`; preload inventory (held without
     /// a body) still spawns fresh on shot.
     carried: Vec<CarriedPiece>,
+    /// scored pieces held kinematically inside their hub
+    hub_held: Vec<HubHeldPiece>,
     /// per-robot held-piece inventory, fed by intake captures and consumed
     /// by shots
     pub held: Vec<u32>,
@@ -184,6 +196,7 @@ impl World {
             field,
             pieces: Vec::new(),
             carried: Vec::new(),
+            hub_held: Vec::new(),
             held: vec![0; specs.len()],
             scores: [0; 2],
             hubs: table.hubs.clone(),
@@ -804,11 +817,13 @@ impl World {
             })
             .collect();
 
-        let mut remove: Vec<usize> = Vec::new();
-        for (pi, h) in self.pieces.iter().enumerate() {
+        for h in self.pieces.iter() {
             // carried pieces are kinematically glued to their robot —
-            // skip intake re-capture and hub scoring for them
-            if self.carried.iter().any(|c| c.handle == *h) {
+            // skip intake re-capture and hub scoring for them; hub-held
+            // scored pieces are already counted
+            if self.carried.iter().any(|c| c.handle == *h)
+                || self.hub_held.iter().any(|c| c.handle == *h)
+            {
                 continue;
             }
             let body = &self.bodies[*h];
@@ -880,11 +895,15 @@ impl World {
             }
 
             // hub scoring: first matching hub wins; the point is also
-            // attributed to the match phase it was scored in (issue #10)
-            if let Some(hub) = self
+            // attributed to the match phase it was scored in (issue #10).
+            // MoSim occupancy model: the piece is CAPTURED kinematically
+            // inside the hub — it stays in the world (fuel visibly piles
+            // up in the scorer) and can't score again.
+            if let Some((hi, hub)) = self
                 .hubs
                 .iter()
-                .find(|hub| pieces::hub_scores(hub, &pos, &[v.x, v.y, v.z]))
+                .enumerate()
+                .find(|(_, hub)| pieces::hub_scores(hub, &pos, &[v.x, v.y, v.z]))
             {
                 let a = (hub.alliance as usize).min(self.scores.len() - 1);
                 // REBUILT hub shifts: a hub only scores while its alliance's
@@ -897,22 +916,35 @@ impl World {
                 }
                 self.scores[a] += 1;
                 self.score_by_phase[a].add(phase, 1);
-                remove.push(pi);
+                // capture into the hub: kinematic, zero velocity, sensor
+                // collider — it rests inside the scorer, out of play
+                {
+                    let body = &mut self.bodies[*h];
+                    body.set_body_type(
+                        RigidBodyType::KinematicPositionBased,
+                        true,
+                    );
+                    body.set_linvel(vector![0.0, 0.0, 0.0], true);
+                    body.set_angvel(vector![0.0, 0.0, 0.0], true);
+                    body.set_next_kinematic_translation(
+                        vector![pos[0], pos[1], pos[2]],
+                    );
+                    let cols: Vec<ColliderHandle> =
+                        body.colliders().to_vec();
+                    for ch in cols {
+                        if let Some(c) = self.colliders.get_mut(ch) {
+                            c.set_sensor(true);
+                        }
+                    }
+                }
+                self.hub_held.push(HubHeldPiece {
+                    handle: *h,
+                    hub: hi,
+                });
+                // stays in `pieces` (kinematic, skipped below) — scored
+                // fuel remains visible inside the hub like MoSim
+                continue;
             }
-        }
-
-        // remove captured/scored pieces (descending order keeps indices valid)
-        remove.sort_unstable_by(|a, b| b.cmp(a));
-        for pi in remove {
-            let h = self.pieces.swap_remove(pi);
-            self.bodies.remove(
-                h,
-                &mut self.islands,
-                &mut self.colliders,
-                &mut self.impulse_joints,
-                &mut self.multibody_joints,
-                true,
-            );
         }
     }
 
@@ -962,8 +994,11 @@ impl World {
             return;
         }
         for &h in &self.pieces {
-            // carried pieces are kinematically glued — skip
-            if self.carried.iter().any(|cp| cp.handle == h) {
+            // kinematically-held pieces (carried / hub-scored) are glued —
+            // rollers can't drag them
+            if self.carried.iter().any(|cp| cp.handle == h)
+                || self.hub_held.iter().any(|cp| cp.handle == h)
+            {
                 continue;
             }
             let (pos, in_zone) = {
@@ -1311,6 +1346,12 @@ impl World {
             .get(robot)
             .map(|js| js.iter().map(|j| j.state()).collect())
             .unwrap_or_default()
+    }
+
+    /// Scored pieces currently held inside hub `hub` — telemetry/viz can
+    /// show fuel accumulating in the scorer (MoSim occupancy model).
+    pub fn hub_held_count(&self, hub: usize) -> usize {
+        self.hub_held.iter().filter(|c| c.hub == hub).count()
     }
 
     /// World positions of all live (not captured/scored) pieces, for the
